@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isNonEmptyString(v, maxLen) {
+      return v is string && v.size() >= 1 && v.size() <= maxLen;
+    }
+
+    // system/currentSession — fixed-link pointer, open read/write
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.title is string
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.status in ['idle', 'presenting', 'ended'];
+      allow delete: if false;
+
+      match /participants/{participantId} {
+        allow read: if true;
+        allow create, update: if isNonEmptyString(request.resource.data.name, 40);
+        allow delete: if false;
+      }
+
+      match /pages/{pageId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.type in ['question', 'video', 'message'];
+        allow delete: if true;
+
+        match /answers/{answerId} {
+          allow read: if true;
+          allow create: if isNonEmptyString(request.resource.data.name, 40)
+            && isNonEmptyString(request.resource.data.text, 280);
+          // host toggles showOnTV / showOnMobile only — text/name must stay within limits
+          allow update: if isNonEmptyString(request.resource.data.name, 40)
+            && isNonEmptyString(request.resource.data.text, 280);
+          allow delete: if false;
+        }
+      }
+    }
+  }
+}
