@@ -1,0 +1,374 @@
+================================================================================
+REFLECTION APP — FULL TECHNICAL REQUIREMENTS & AS-BUILT SPECIFICATION
+================================================================================
+Document purpose : Single source of truth for product behavior + implementation
+Language of UI   : Thai
+Repo             : https://github.com/pran-awesome/reflection-app
+Production URL   : https://water-drop-93a56.web.app
+Last updated     : 2026-08-07
+================================================================================
+
+
+1. SYSTEM OVERVIEW
+--------------------------------------------------------------------------------
+Realtime web app for post-event reflection activities. Three roles share one
+active session through Firebase Firestore realtime listeners (onSnapshot).
+Clients never talk to each other directly; all state changes go through
+Firestore. Video files are stored on a local VPS media server (not Firebase
+Storage) to stay on the free Spark plan.
+
+Roles
+  Host (controller)  Phone of facilitator — run session, edit pages, pick
+                     answers onto TV/mobile, upload video, search answers
+  TV                 Projector / big screen — QR, questions, floating answers,
+                     spotlighted answers, video, messages
+  Participant        Attendee phone — join via QR/name, submit text answers
+
+Capacity target
+  200+ concurrent participants
+  Up to 3 TV screens
+  Up to 2 host controllers
+  Same fixed URLs for every event (no session id in the path)
+
+Non-goals
+  No user-facing login UI (Anonymous Auth only, no credentials form)
+  No room lock / invite codes — anyone with /join can enter
+  No multiple-choice or rating answers — free text only
+  No automatic moderation / profanity filter — host picks what goes on screen
+  No multi-tenant concurrent events — one active session via fixed pointer
+
+
+2. FIXED ROUTES
+--------------------------------------------------------------------------------
+  /host            Host control (prepare + present)
+  /host/history    Past sessions + CSV export
+  /tv              TV display
+  /join            Enter display name (encoded in QR)
+  /participant     Answer questions (after join)
+  *                Redirects to /host
+
+All routes are SPA client routes (Firebase Hosting rewrite -> /index.html).
+
+
+3. HIGH-LEVEL ARCHITECTURE
+--------------------------------------------------------------------------------
+
+  [Host phones] ──┐
+  [TV browsers] ──┼── HTTPS ──> Firebase Hosting (CDN) ──> React SPA
+  [Participants] ─┘                    │
+                                       │ Firestore SDK onSnapshot / writes
+                                       v
+                         Cloud Firestore (asia-southeast1 / Singapore)
+                         Project: water-drop-93a56
+                         Database: (default)
+
+  [Host upload] ── POST multipart ──> VPS media server :8080
+                                      Host: 187.127.210.203 (Kuala Lumpur)
+                                      Disk: /home/wafer/reflection-app/uploads
+                                      systemd: reflection-media.service
+
+  [TV / Host video] ── GET http://187.127.210.203:8080/media/... ──> same disk
+
+Auth: Firebase Anonymous Auth (must be enabled in Console).
+Join flow creates anonymous uid, uses it as participantId and answer doc id.
+
+
+4. DATA MODEL (FIRESTORE)
+--------------------------------------------------------------------------------
+
+system/currentSession
+  activeSessionId : string | null
+  Purpose: fixed-link pointer so /tv /join /participant always know the live
+  session without URL params. Host "start new" / draft creation updates this.
+  Old sessions remain under sessions/{id} for history.
+
+sessions/{sessionId}
+  title            : string (<= 100)
+  status           : "idle" | "presenting" | "ended"
+  currentPageIndex : number
+                     -1 = QR waiting room (before first page)
+                      0..n-1 = index into pages ordered by `order`
+  createdAt        : timestamp
+  endedAt          : timestamp | null
+
+sessions/{sessionId}/participants/{participantId}
+  name     : string (1–40)
+  joinedAt : timestamp
+  participantId = Firebase Auth anonymous uid
+
+sessions/{sessionId}/pages/{pageId}
+  order : number
+  type  : "question" | "video" | "message"
+  title : string
+  content : {
+    questionText?      : string   // question/message main text
+    messageText?       : string
+    videoUrl?          : string   // public URL from VPS media server
+    videoStoragePath?  : string   // relative path under uploads/
+  }
+  videoState? : {
+    playing   : boolean
+    startedAt : timestamp | null  // TV seeks from this for sync
+  }
+
+sessions/{sessionId}/pages/{pageId}/answers/{answerId}
+  participantId : string
+  name          : string (1–40)
+  text          : string (1–280)
+  createdAt     : timestamp
+  showOnTV      : boolean   // default false — host toggle
+  showOnMobile  : boolean   // default false — host toggle
+  answerId = participant uid  => 1 answer per person per question
+
+
+5. FIRESTORE RULES (SUMMARY)
+--------------------------------------------------------------------------------
+File: firestore.rules
+
+  system/*           read/write open
+  sessions           read open
+                     create/update if title string <=100 and status in enum
+                     delete denied
+  participants       read open; create/update if name 1–40; delete denied
+  pages              read open; create/update if type in enum; delete allowed
+  answers            read open
+                     create if name 1–40 and text 1–280
+                     update if name/text still within limits (host toggles)
+                     delete denied
+
+Indexes: firestore.indexes.json currently empty (single-field + client
+orderBy/limit sufficient for current queries).
+
+
+6. SESSION LIFECYCLE
+--------------------------------------------------------------------------------
+1. Host opens /host
+2. ensureDraftSession():
+   - If pointer session exists and status != ended -> reuse
+   - Else create idle session (currentPageIndex=-1), set pointer
+3. Host edits title + pages (question / video / message), reorder, upload video
+4. Host taps "เริ่มงานใหม่" -> status=presenting, currentPageIndex=-1
+5. TV shows QR for /join + live participant count
+6. Host next/prev changes currentPageIndex; all clients follow via onSnapshot
+7. On question pages:
+   - Participants submit one answer
+   - Host searches/filters and toggles showOnTV / showOnMobile
+   - TV floats recent answers; spotlight for showOnTV=true
+8. Host "จบงาน" -> status=ended, endedAt=now
+9. History at /host/history lists sessions; CSV export client-side
+
+
+7. ROLE FUNCTIONAL REQUIREMENTS
+--------------------------------------------------------------------------------
+
+7.1 Host /host
+  Prepare (idle)
+    - Set session title
+    - CRUD pages: add/delete/reorder/edit; types question|video|message
+    - Video page: upload .mp4 <= 200MB with progress bar
+    - Start presenting
+  Presenting
+    - Show current page; prev/next (disabled at ends)
+    - Edit pages anytime ("แก้ไขคำถาม") — realtime for others
+    - Question: list answers newest first (limit 200)
+      * Search bar filters by name OR answer text (case-insensitive substring)
+      * Empty search state in Thai when no matches
+      * Toggle "ขึ้นจอทีวี" / "ขึ้นจอมือถือ" (multi-select allowed)
+    - Video: play/pause writes videoState
+    - Live participant count
+    - End session
+  Links to /host/history
+
+7.2 TV /tv
+  - Resolve activeSessionId then subscribe session + pages + participants + answers
+  - idle / missing -> waiting message
+  - currentPageIndex == -1 -> QR (/join) + count
+  - question -> large question text + floating answers (cap ~20–25 DOM) +
+    spotlight for showOnTV
+  - video -> fullscreen <video> synced via videoState.playing + startedAt seek
+  - message -> fullscreen text
+
+7.3 Join /join
+  - Name form 1–40 chars
+  - ensureAnonymousAuth() then write participants/{uid}
+  - Store name + joined flag in localStorage
+  - Redirect /participant
+  - Requires Anonymous provider ENABLED in Firebase Console
+
+7.4 Participant /participant
+  - If not joined locally -> redirect /join
+  - Follow currentPageIndex realtime
+  - question: answer form (1–280), one shot per page; see floating + showOnMobile
+  - video/message: status text only (no local video playback required)
+
+7.5 History /host/history
+  - List sessions by date
+  - Detail: questions + all answers + names
+  - Export CSV (client-generated from Firestore reads)
+
+
+8. DESIGN SYSTEM
+--------------------------------------------------------------------------------
+Direction: warm earth-tone, modern, soft radius (not cartoon)
+Font: Sarabun (Google Fonts) for Thai + Latin
+CSS variables (src/styles/global.css):
+  --bg-page #F7F1E8
+  --bg-surface #FFFCF7
+  --bg-surface-alt #EFE6D8
+  --text-primary #3E2B22
+  --text-secondary #7A6552
+  --text-on-accent #FFFCF7
+  --color-terracotta #C97A56 / dark #A85F3F
+  --color-sage #8A9A6E
+  --color-mustard #D9A441  (selected / spotlight answers)
+  --border-color #E3D5C2
+  --radius-sm 8px / md 14px / lg 20px / pill 999px
+  --space-1..6 : 4,8,16,24,32,48 px
+
+Animation rules (floating answers)
+  Animate only transform + opacity
+  Cap concurrent floating DOM nodes (~20–25 TV, fewer on mobile)
+  CSS keyframes only — no physics libraries
+  Honor prefers-reduced-motion
+
+
+9. TECH STACK (AS BUILT)
+--------------------------------------------------------------------------------
+Frontend
+  React 18 + Vite 5
+  react-router-dom 6
+  firebase JS SDK 11 (Firestore + Auth)
+  qrcode.react
+  Plain CSS (no UI framework)
+
+Backend data
+  Firebase project water-drop-93a56
+  Firestore location: asia-southeast1 (Singapore) — recreated from nam5
+    for latency (~90ms vs ~1.3s from Malaysia)
+  Firebase Hosting for SPA
+  Firebase Anonymous Auth
+
+Media
+  Node.js Express + multer (server/)
+  Port 8080, systemd unit reflection-media.service
+  POST /upload  fields: sessionId, pageId, file
+  GET  /media/**  static from uploads/
+  CORS allow: water-drop-93a56.web.app (+ localhost Vite ports)
+  Max 200MB, .mp4 only
+  Path: sessions/{sessionId}/videos/{pageId}.mp4
+
+Env (Vite, see .env.example — never commit .env)
+  VITE_FIREBASE_API_KEY
+  VITE_FIREBASE_AUTH_DOMAIN
+  VITE_FIREBASE_PROJECT_ID
+  VITE_FIREBASE_MESSAGING_SENDER_ID
+  VITE_FIREBASE_APP_ID
+  VITE_MEDIA_BASE_URL=http://187.127.210.203:8080
+
+
+10. SOURCE LAYOUT
+--------------------------------------------------------------------------------
+src/
+  App.jsx                 routes
+  firebase.js             app / db / auth init
+  main.jsx
+  styles/global.css
+  pages/Host/HostPage.jsx HistoryPage.jsx
+  pages/TV/TVPage.jsx
+  pages/Join/JoinPage.jsx
+  pages/Participant/ParticipantPage.jsx
+  components/FloatingAnswers/
+  components/PageEditor/  (PageEditor, PageForm, VideoUploader)
+  hooks/                  useCurrentSession, usePages, useAnswers,
+                          useParticipants, useSessions, useFloatingQueue,
+                          useHasAnswered
+  services/               session/page/answer/participant/history/videoUpload
+  lib/                    auth.js, localStorage.js, csv.js
+server/
+  index.js                media API
+  package.json
+  reflection-media.service
+uploads/                  runtime video files (gitignored except .gitkeep)
+firestore.rules
+storage.rules             (legacy; uploads no longer use Firebase Storage)
+firebase.json
+.firebaserc
+
+
+11. REALTIME / PERFORMANCE NOTES
+--------------------------------------------------------------------------------
+Typical listeners per client (approx):
+  pointer + session + pages + (participants and/or answers)
+With 200 participants + 3 TVs + 2 hosts expect hundreds of concurrent
+onSnapshot streams — Firestore handles fanout; keep answer queries limited
+(orderBy createdAt desc, limit 30 on TV / 200 on host).
+
+Floating answers: queue + DOM cap prevents TV GPU overload.
+
+Region choice: Singapore Firestore is required for acceptable latency from
+Malaysia / SEA audiences. US (nam5) caused ~1.3s per read and felt broken.
+
+Hosting CDN already caches near KUL; not the bottleneck.
+
+VPS (this box): 2 vCPU / 8GB — fine for media + light Express; not intended
+as the primary realtime bus for 200 users.
+
+
+12. DEPLOY / OPS
+--------------------------------------------------------------------------------
+Frontend
+  npm install
+  cp .env.example .env   # fill Firebase web config
+  npm run build
+  firebase deploy --only hosting,firestore:rules --project water-drop-93a56
+
+Media server
+  cd server && npm install
+  sudo cp reflection-media.service /etc/systemd/system/
+  sudo systemctl enable --now reflection-media
+  curl http://127.0.0.1:8080/health
+
+Auth prerequisite (one-time Console)
+  https://console.firebase.google.com/project/water-drop-93a56/authentication/providers
+  Enable Anonymous
+
+Production links
+  Host        https://water-drop-93a56.web.app/host
+  TV          https://water-drop-93a56.web.app/tv
+  Join        https://water-drop-93a56.web.app/join
+  Participant https://water-drop-93a56.web.app/participant
+  History     https://water-drop-93a56.web.app/host/history
+  Media       http://187.127.210.203:8080
+
+
+13. ACCEPTANCE CRITERIA
+--------------------------------------------------------------------------------
+[ ] Fixed routes work without login UI
+[ ] Host can add/edit/reorder pages before and during present; others update live
+[ ] TV shows QR; joins appear in count realtime
+[ ] Late joiners see current page and can answer
+[ ] Answers float on TV/participant; host spotlight toggles work
+[ ] Host search filters answers by name or text
+[ ] Video upload to VPS, play/pause sync on TV
+[ ] End session keeps history; CSV export works
+[ ] Floating answers stay smooth with many submissions (DOM capped)
+[ ] Design tokens / Sarabun / Thai UI consistent
+[ ] Firestore in asia-southeast1 (verify in Console)
+[ ] Anonymous Auth enabled (join must not return CONFIGURATION_NOT_FOUND)
+
+
+14. KNOWN CONSTRAINTS / DECISIONS
+--------------------------------------------------------------------------------
+- Videos on VPS over HTTP (not HTTPS): browsers may warn on mixed content
+  when page is HTTPS. Prefer same-origin proxy or TLS on :8080 for production
+  hardening later.
+- Open Firestore rules are intentional for event simplicity; validate lengths
+  only. Do not store sensitive personal data.
+- Named extra Firestore databases require billing; free path was delete+
+  recreate (default) in asia-southeast1.
+- Answer document id = auth uid enforces one answer per user per question
+  without extra queries.
+
+================================================================================
+END OF DOCUMENT
+================================================================================
