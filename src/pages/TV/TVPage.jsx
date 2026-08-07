@@ -7,6 +7,7 @@ import { useAnswers } from '../../hooks/useAnswers';
 import { useFloatingQueue } from '../../hooks/useFloatingQueue';
 import FloatingAnswers from '../../components/FloatingAnswers/FloatingAnswers';
 import Spotlight from '../../components/FloatingAnswers/Spotlight';
+import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
 
 function TvVideo({ page }) {
   const videoRef = useRef(null);
@@ -61,13 +62,14 @@ export default function TVPage() {
 
   const currentPageIndex = session?.currentPageIndex ?? -1;
   const currentPage = currentPageIndex >= 0 ? pages[currentPageIndex] : null;
-  const isQuestionPage = currentPage?.type === 'question';
+  const isQuestionPage = isAnswerPage(currentPage?.type);
 
   const { items: floatingItems, push: pushFloating, remove: removeFloating } = useFloatingQueue();
 
   const answers = useAnswers(sessionId, isQuestionPage ? currentPage.id : null, {
     limitCount: 30,
-    onAdded: (answer) => pushFloating({ id: answer.id, name: answer.name, text: answer.text }),
+    onAdded: (answer) =>
+      pushFloating({ id: answer.id, name: answer.name, text: formatAnswerDisplay(answer) }),
   });
 
   if (loading) {
@@ -117,13 +119,18 @@ export default function TVPage() {
     );
   }
 
-  // question
+  // question / split_question
   return (
     <div className="tv-stage">
       <div className="tv-topbar">
         <span className="badge badge-sage">เข้าร่วมแล้ว {participantCount} คน</span>
       </div>
       <p className="display-text tv-question-text">{currentPage.title}</p>
+      {currentPage.type === 'split_question' && (
+        <p className="body-text tv-prompts-text">
+          {currentPage.content?.promptA || 'ช่องที่ 1'} · {currentPage.content?.promptB || 'ช่องที่ 2'}
+        </p>
+      )}
       <Spotlight answers={answers} field="showOnTV" />
       <FloatingAnswers items={floatingItems} remove={removeFloating} variant="tv" />
     </div>

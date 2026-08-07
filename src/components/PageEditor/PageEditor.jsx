@@ -2,7 +2,12 @@ import { useState } from 'react';
 import PageForm from './PageForm';
 import { deletePage, newPageRef, reorderPages } from '../../services/pageService';
 
-const TYPE_LABELS = { question: 'คำถาม', video: 'วิดีโอ', message: 'ข้อความ' };
+const TYPE_LABELS = {
+  question: 'คำถาม',
+  split_question: 'คำถามสองช่อง',
+  video: 'วิดีโอ',
+  message: 'ข้อความ',
+};
 
 export default function PageEditor({ sessionId, pages }) {
   const [addingType, setAddingType] = useState(null);
@@ -109,6 +114,9 @@ export default function PageEditor({ sessionId, pages }) {
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => startAdding('question')}>
             + คำถาม
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => startAdding('split_question')}>
+            + คำถามสองช่อง
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => startAdding('video')}>
             + วิดีโอ

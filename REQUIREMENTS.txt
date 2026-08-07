@@ -98,10 +98,12 @@ sessions/{sessionId}/participants/{participantId}
 
 sessions/{sessionId}/pages/{pageId}
   order : number
-  type  : "question" | "video" | "message"
+  type  : "question" | "split_question" | "video" | "message"
   title : string
   content : {
-    questionText?      : string   // question/message main text
+    questionText?      : string   // question/split_question/message main text
+    promptA?           : string   // split_question only — label for answer box 1
+    promptB?           : string   // split_question only — label for answer box 2
     messageText?       : string
     videoUrl?          : string   // public URL from VPS media server
     videoStoragePath?  : string   // relative path under uploads/
@@ -114,11 +116,16 @@ sessions/{sessionId}/pages/{pageId}
 sessions/{sessionId}/pages/{pageId}/answers/{answerId}
   participantId : string
   name          : string (1–40)
-  text          : string (1–280)
+  text          : string (1–600)
+                  // question: raw answer (1–280)
+                  // split_question: `${textA}\n${textB}` combined, used for
+                  // float/search/CSV fallback
+  textA?        : string        // split_question only — answer box 1 (1–280)
+  textB?        : string        // split_question only — answer box 2 (1–280)
   createdAt     : timestamp
   showOnTV      : boolean   // default false — host toggle
   showOnMobile  : boolean   // default false — host toggle
-  answerId = participant uid  => 1 answer per person per question
+  answerId = participant uid  => 1 answer per person per question/split_question page
 
 
 5. FIRESTORE RULES (SUMMARY)
@@ -130,9 +137,11 @@ File: firestore.rules
                      create/update if title string <=100 and status in enum
                      delete denied
   participants       read open; create/update if name 1–40; delete denied
-  pages              read open; create/update if type in enum; delete allowed
+  pages              read open; create/update if type in enum (incl. split_question);
+                     delete allowed
   answers            read open
-                     create if name 1–40 and text 1–280
+                     create if name 1–40 and text 1–600 (600 covers split_question's
+                     combined `textA\ntextB`; single-box answers stay <=280 in app)
                      update if name/text still within limits (host toggles)
                      delete denied
 
@@ -146,14 +155,16 @@ orderBy/limit sufficient for current queries).
 2. ensureDraftSession():
    - If pointer session exists and status != ended -> reuse
    - Else create idle session (currentPageIndex=-1), set pointer
-3. Host edits title + pages (question / video / message), reorder, upload video
+3. Host edits title + pages (question / split_question / video / message), reorder,
+   upload video
 4. Host taps "เริ่มงานใหม่" -> status=presenting, currentPageIndex=-1
 5. TV shows QR for /join + live participant count
 6. Host next/prev changes currentPageIndex; all clients follow via onSnapshot
-7. On question pages:
-   - Participants submit one answer
+7. On question / split_question pages:
+   - Participants submit one answer (split_question: both boxes in one submit)
    - Host searches/filters and toggles showOnTV / showOnMobile
-   - TV floats recent answers; spotlight for showOnTV=true
+   - TV floats recent answers; spotlight for showOnTV=true (split_question shows
+     both box texts, one per line)
 8. Host "จบงาน" -> status=ended, endedAt=now
 9. History at /host/history lists sessions; CSV export client-side
 
@@ -164,15 +175,19 @@ orderBy/limit sufficient for current queries).
 7.1 Host /host
   Prepare (idle)
     - Set session title
-    - CRUD pages: add/delete/reorder/edit; types question|video|message
+    - CRUD pages: add/delete/reorder/edit; types question|split_question|video|message
+    - split_question: main question text + promptA/promptB labels for the two
+      answer boxes
     - Video page: upload .mp4 <= 200MB with progress bar
     - Start presenting
   Presenting
     - Show current page; prev/next (disabled at ends)
     - Edit pages anytime ("แก้ไขคำถาม") — realtime for others
-    - Question: list answers newest first (limit 200)
-      * Search bar filters by name OR answer text (case-insensitive substring)
+    - Question / split_question: list answers newest first (limit 200)
+      * Search bar filters by name OR answer text incl. textA/textB
+        (case-insensitive substring)
       * Empty search state in Thai when no matches
+      * split_question answers show both boxes labeled with promptA/promptB
       * Toggle "ขึ้นจอทีวี" / "ขึ้นจอมือถือ" (multi-select allowed)
     - Video: play/pause writes videoState
     - Live participant count
@@ -185,6 +200,9 @@ orderBy/limit sufficient for current queries).
   - currentPageIndex == -1 -> QR (/join) + count
   - question -> large question text + floating answers (cap ~20–25 DOM) +
     spotlight for showOnTV
+  - split_question -> same as question, plus small promptA/promptB line under
+    the main question; floating/spotlight answers show textA and textB on
+    separate lines
   - video -> fullscreen <video> synced via videoState.playing + startedAt seek
   - message -> fullscreen text
 
@@ -199,12 +217,15 @@ orderBy/limit sufficient for current queries).
   - If not joined locally -> redirect /join
   - Follow currentPageIndex realtime
   - question: answer form (1–280), one shot per page; see floating + showOnMobile
+  - split_question: two labeled textareas (promptA/promptB, 1–280 each),
+    submitted together as one answer; see floating + showOnMobile
   - video/message: status text only (no local video playback required)
 
 7.5 History /host/history
   - List sessions by date
-  - Detail: questions + all answers + names
-  - Export CSV (client-generated from Firestore reads)
+  - Detail: questions + split_questions (both boxes) + all answers + names
+  - Export CSV (client-generated from Firestore reads); split_question rows
+    include separate "คำตอบช่องที่ 1" / "คำตอบช่องที่ 2" columns
 
 
 8. DESIGN SYSTEM

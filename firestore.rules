@@ -28,16 +28,16 @@ service cloud.firestore {
 
       match /pages/{pageId} {
         allow read: if true;
-        allow create, update: if request.resource.data.type in ['question', 'video', 'message'];
+        allow create, update: if request.resource.data.type in ['question', 'split_question', 'video', 'message'];
         allow delete: if true;
 
         match /answers/{answerId} {
           allow read: if true;
+          // text up to 600 covers split combined display; single answers stay <=280 in app
           allow create: if isNonEmptyString(request.resource.data.name, 40)
-            && isNonEmptyString(request.resource.data.text, 280);
-          // host toggles showOnTV / showOnMobile only — text/name must stay within limits
+            && isNonEmptyString(request.resource.data.text, 600);
           allow update: if isNonEmptyString(request.resource.data.name, 40)
-            && isNonEmptyString(request.resource.data.text, 280);
+            && isNonEmptyString(request.resource.data.text, 600);
           allow delete: if false;
         }
       }

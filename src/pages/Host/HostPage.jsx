@@ -14,6 +14,25 @@ import {
 import { setAnswerShowOnMobile, setAnswerShowOnTV } from '../../services/answerService';
 import { setVideoPlaying } from '../../services/pageService';
 import PageEditor from '../../components/PageEditor/PageEditor';
+import { formatAnswerDisplay, formatAnswerSearchBlob, isAnswerPage } from '../../lib/answers';
+
+function AnswerBody({ answer, page }) {
+  if (page.type === 'split_question' && (answer.textA != null || answer.textB != null)) {
+    return (
+      <div className="stack" style={{ gap: 'var(--space-2)' }}>
+        <div>
+          <p className="caption text-secondary">{page.content?.promptA || 'ช่องที่ 1'}</p>
+          <p className="answer-text">{answer.textA || '—'}</p>
+        </div>
+        <div>
+          <p className="caption text-secondary">{page.content?.promptB || 'ช่องที่ 2'}</p>
+          <p className="answer-text">{answer.textB || '—'}</p>
+        </div>
+      </div>
+    );
+  }
+  return <p className="answer-text">{formatAnswerDisplay(answer)}</p>;
+}
 
 function QuestionModeration({ sessionId, page }) {
   const answers = useAnswers(sessionId, page.id, { limitCount: 200 });
@@ -25,10 +44,7 @@ function QuestionModeration({ sessionId, page }) {
 
   const query = search.trim().toLowerCase();
   const filteredAnswers = query
-    ? answers.filter(
-        (answer) =>
-          answer.name?.toLowerCase().includes(query) || answer.text?.toLowerCase().includes(query)
-      )
+    ? answers.filter((answer) => formatAnswerSearchBlob(answer).includes(query))
     : answers;
 
   return (
@@ -46,7 +62,7 @@ function QuestionModeration({ sessionId, page }) {
 
       {filteredAnswers.map((answer) => (
         <div key={answer.id} className="answer-card">
-          <p className="answer-text">{answer.text}</p>
+          <AnswerBody answer={answer} page={page} />
           <div className="row-between" style={{ marginTop: 'var(--space-2)' }}>
             <span className="name-tag">{answer.name}</span>
             <div className="row">
@@ -233,9 +249,14 @@ export default function HostPage() {
           </div>
         )}
 
-        {currentPage?.type === 'question' && (
+        {isAnswerPage(currentPage?.type) && (
           <div className="stack">
             <h2 className="h2">{currentPage.title}</h2>
+            {currentPage.type === 'split_question' && (
+              <p className="body-small text-secondary">
+                ช่อง 1: {currentPage.content?.promptA || '—'} · ช่อง 2: {currentPage.content?.promptB || '—'}
+              </p>
+            )}
             <QuestionModeration sessionId={sessionId} page={currentPage} />
           </div>
         )}

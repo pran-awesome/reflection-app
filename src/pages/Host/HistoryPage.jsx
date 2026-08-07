@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSessions } from '../../hooks/useSessions';
 import { fetchSessionPagesWithAnswers } from '../../services/historyService';
 import { buildSessionCsv, downloadCsv } from '../../lib/csv';
+import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
 
 const STATUS_LABELS = {
   idle: 'กำลังเตรียม',
@@ -10,11 +11,34 @@ const STATUS_LABELS = {
   ended: 'จบแล้ว',
 };
 
-const TYPE_LABELS = { question: 'คำถาม', video: 'วิดีโอ', message: 'ข้อความ' };
+const TYPE_LABELS = {
+  question: 'คำถาม',
+  split_question: 'คำถามสองช่อง',
+  video: 'วิดีโอ',
+  message: 'ข้อความ',
+};
 
 function formatDate(ts) {
   if (!ts?.toDate) return '-';
   return ts.toDate().toLocaleString('th-TH');
+}
+
+function AnswerBody({ answer, page }) {
+  if (page.type === 'split_question' && (answer.textA != null || answer.textB != null)) {
+    return (
+      <div className="stack" style={{ gap: 'var(--space-2)' }}>
+        <div>
+          <p className="caption text-secondary">{page.content?.promptA || 'ช่องที่ 1'}</p>
+          <p className="answer-text">{answer.textA || '—'}</p>
+        </div>
+        <div>
+          <p className="caption text-secondary">{page.content?.promptB || 'ช่องที่ 2'}</p>
+          <p className="answer-text">{answer.textB || '—'}</p>
+        </div>
+      </div>
+    );
+  }
+  return <p className="answer-text">{formatAnswerDisplay(answer)}</p>;
 }
 
 export default function HistoryPage() {
@@ -90,14 +114,14 @@ export default function HistoryPage() {
                             {page.title || '(ไม่มีข้อความ)'}
                           </span>
                         </div>
-                        {page.type === 'question' ? (
+                        {isAnswerPage(page.type) ? (
                           page.answers.length === 0 ? (
                             <p className="body-small">ไม่มีคำตอบ</p>
                           ) : (
                             <div className="stack">
                               {page.answers.map((answer) => (
                                 <div key={answer.id} className="answer-card">
-                                  <p className="answer-text">{answer.text}</p>
+                                  <AnswerBody answer={answer} page={page} />
                                   <div className="answer-meta">
                                     <span className="name-tag">{answer.name}</span>
                                   </div>

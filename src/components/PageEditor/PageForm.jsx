@@ -2,17 +2,33 @@ import { useState } from 'react';
 import VideoUploader from './VideoUploader';
 import { savePage } from '../../services/pageService';
 
-const TYPE_LABELS = { question: 'คำถาม', video: 'วิดีโอ', message: 'ข้อความ' };
+const TYPE_LABELS = {
+  question: 'คำถาม',
+  split_question: 'คำถามสองช่อง',
+  video: 'วิดีโอ',
+  message: 'ข้อความ',
+};
 
 export default function PageForm({ sessionId, pageId, order, type, initialData, onSaved, onCancel }) {
   const [text, setText] = useState(initialData?.title || '');
+  const [promptA, setPromptA] = useState(initialData?.content?.promptA || '');
+  const [promptB, setPromptB] = useState(initialData?.content?.promptB || '');
   const [videoUrl, setVideoUrl] = useState(initialData?.content?.videoUrl || '');
   const [videoStoragePath, setVideoStoragePath] = useState(initialData?.content?.videoStoragePath || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   async function handleSave() {
-    if (type !== 'video' && text.trim().length === 0) {
+    if (type === 'split_question') {
+      if (text.trim().length === 0) {
+        setError('กรุณากรอกคำถามหลัก');
+        return;
+      }
+      if (promptA.trim().length === 0 || promptB.trim().length === 0) {
+        setError('กรุณากรอกคำอธิบายทั้งสองช่องคำตอบ');
+        return;
+      }
+    } else if (type !== 'video' && text.trim().length === 0) {
       setError('กรุณากรอกข้อความ');
       return;
     }
@@ -23,12 +39,20 @@ export default function PageForm({ sessionId, pageId, order, type, initialData, 
     setSaving(true);
     setError('');
     const title = text.trim();
-    const content =
-      type === 'question'
-        ? { questionText: title }
-        : type === 'message'
-          ? { messageText: title }
-          : { videoUrl, videoStoragePath };
+    let content;
+    if (type === 'question') {
+      content = { questionText: title };
+    } else if (type === 'split_question') {
+      content = {
+        questionText: title,
+        promptA: promptA.trim(),
+        promptB: promptB.trim(),
+      };
+    } else if (type === 'message') {
+      content = { messageText: title };
+    } else {
+      content = { videoUrl, videoStoragePath };
+    }
     try {
       await savePage(sessionId, pageId, { order, type, title, content });
       onSaved();
@@ -45,7 +69,40 @@ export default function PageForm({ sessionId, pageId, order, type, initialData, 
         {TYPE_LABELS[type]}
       </span>
 
-      {type !== 'video' ? (
+      {type === 'split_question' ? (
+        <>
+          <div>
+            <label className="field-label">คำถามหลัก</label>
+            <textarea
+              className="textarea"
+              value={text}
+              maxLength={500}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="พิมพ์คำถามหลักที่แสดงด้านบน..."
+            />
+          </div>
+          <div>
+            <label className="field-label">คำอธิบายช่องที่ 1</label>
+            <input
+              className="input"
+              value={promptA}
+              maxLength={120}
+              onChange={(e) => setPromptA(e.target.value)}
+              placeholder="เช่น สิ่งที่เรียนรู้"
+            />
+          </div>
+          <div>
+            <label className="field-label">คำอธิบายช่องที่ 2</label>
+            <input
+              className="input"
+              value={promptB}
+              maxLength={120}
+              onChange={(e) => setPromptB(e.target.value)}
+              placeholder="เช่น สิ่งที่จะนำไปใช้"
+            />
+          </div>
+        </>
+      ) : type !== 'video' ? (
         <div>
           <label className="field-label">{type === 'question' ? 'ข้อความคำถาม' : 'ข้อความที่จะแสดง'}</label>
           <textarea

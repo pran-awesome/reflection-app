@@ -8,22 +8,34 @@ function escapeCsvField(value) {
 
 export function buildSessionCsv(session, pagesWithAnswers) {
   const rows = [
-    ['ลำดับหน้า', 'ประเภท', 'คำถาม/ข้อความ', 'ชื่อผู้ตอบ', 'คำตอบ', 'เวลาที่ตอบ'],
+    [
+      'ลำดับหน้า',
+      'ประเภท',
+      'คำถาม/ข้อความ',
+      'ชื่อผู้ตอบ',
+      'คำตอบ',
+      'คำตอบช่องที่ 1',
+      'คำตอบช่องที่ 2',
+      'เวลาที่ตอบ',
+    ],
   ];
 
   pagesWithAnswers.forEach((page) => {
     const pageLabel = page.title || page.content?.questionText || page.content?.messageText || '';
     if (!page.answers || page.answers.length === 0) {
-      rows.push([page.order + 1, page.type, pageLabel, '', '', '']);
+      rows.push([page.order + 1, page.type, pageLabel, '', '', '', '', '']);
       return;
     }
     page.answers.forEach((answer) => {
+      const isSplit = answer.textA != null || answer.textB != null;
       rows.push([
         page.order + 1,
         page.type,
         pageLabel,
         answer.name,
-        answer.text,
+        isSplit ? '' : answer.text,
+        answer.textA || '',
+        answer.textB || '',
         answer.createdAt ? answer.createdAt.toDate().toLocaleString('th-TH') : '',
       ]);
     });
