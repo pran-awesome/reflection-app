@@ -13,6 +13,20 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Saved slide decks (premake, then present on event day)
+    match /decks/{deckId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.title is string
+        && request.resource.data.title.size() <= 100;
+      allow delete: if true;
+
+      match /pages/{pageId} {
+        allow read: if true;
+        allow create, update: if request.resource.data.type in ['question', 'split_question', 'video', 'message'];
+        allow delete: if true;
+      }
+    }
+
     match /sessions/{sessionId} {
       allow read: if true;
       allow create, update: if request.resource.data.title is string
@@ -33,7 +47,6 @@ service cloud.firestore {
 
         match /answers/{answerId} {
           allow read: if true;
-          // text up to 600 covers split combined display; single answers stay <=280 in app
           allow create: if isNonEmptyString(request.resource.data.name, 40)
             && isNonEmptyString(request.resource.data.text, 600);
           allow update: if isNonEmptyString(request.resource.data.name, 40)

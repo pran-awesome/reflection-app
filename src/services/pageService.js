@@ -1,13 +1,24 @@
-import { collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore';
 import { db } from '../firebase';
 
-export function newPageRef(sessionId) {
-  return doc(collection(db, 'sessions', sessionId, 'pages'));
+export function newPageRef(ownerId, scope = 'sessions') {
+  return doc(collection(db, scope, ownerId, 'pages'));
 }
 
-export function savePage(sessionId, pageId, { order, type, title, content }) {
+export function savePage(ownerId, pageId, { order, type, title, content }, scope = 'sessions') {
   return setDoc(
-    doc(db, 'sessions', sessionId, 'pages', pageId),
+    doc(db, scope, ownerId, 'pages', pageId),
     {
       order,
       type,
@@ -19,14 +30,14 @@ export function savePage(sessionId, pageId, { order, type, title, content }) {
   );
 }
 
-export function deletePage(sessionId, pageId) {
-  return deleteDoc(doc(db, 'sessions', sessionId, 'pages', pageId));
+export function deletePage(ownerId, pageId, scope = 'sessions') {
+  return deleteDoc(doc(db, scope, ownerId, 'pages', pageId));
 }
 
-export async function reorderPages(sessionId, orderedPageIds) {
+export async function reorderPages(ownerId, orderedPageIds, scope = 'sessions') {
   const batch = writeBatch(db);
   orderedPageIds.forEach((pageId, index) => {
-    batch.update(doc(db, 'sessions', sessionId, 'pages', pageId), { order: index });
+    batch.update(doc(db, scope, ownerId, 'pages', pageId), { order: index });
   });
   await batch.commit();
 }
@@ -37,4 +48,30 @@ export function setVideoPlaying(sessionId, pageId, playing) {
     updates['videoState.startedAt'] = serverTimestamp();
   }
   return updateDoc(doc(db, 'sessions', sessionId, 'pages', pageId), updates);
+}
+
+export async function copyPages(fromScope, fromId, toScope, toId) {
+  const snap = await getDocs(query(collection(db, fromScope, fromId, 'pages'), orderBy('order', 'asc')));
+  if (snap.empty) return 0;
+
+  let batch = writeBatch(db);
+  let ops = 0;
+  for (const pageDoc of snap.docs) {
+    const data = pageDoc.data();
+    const dest = doc(collection(db, toScope, toId, 'pages'));
+    batch.set(dest, {
+      order: data.order ?? ops,
+      type: data.type,
+      title: data.title || '',
+      content: data.content || {},
+      ...(data.type === 'video' ? { videoState: { playing: false, startedAt: null } } : {}),
+    });
+    ops += 1;
+    if (ops % 400 === 0) {
+      await batch.commit();
+      batch = writeBatch(db);
+    }
+  }
+  await batch.commit();
+  return snap.size;
 }

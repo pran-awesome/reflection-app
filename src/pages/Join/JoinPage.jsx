@@ -38,9 +38,12 @@ export default function JoinPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-padded stack" style={{ minHeight: '100vh', justifyContent: 'center' }}>
-        <h1 className="h1" style={{ textAlign: 'center' }}>
+    <div className="page page--participant">
+      <div
+        className="page-padded page-padded--mobile stack"
+        style={{ minHeight: '100dvh', justifyContent: 'center' }}
+      >
+        <h1 className="h1 participant-title" style={{ textAlign: 'center' }}>
           เข้าร่วมกิจกรรม Reflection
         </h1>
         <p className="body-text text-secondary" style={{ textAlign: 'center' }}>
@@ -57,11 +60,13 @@ export default function JoinPage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="เช่น สมชาย"
               autoFocus
+              autoComplete="nickname"
+              enterKeyHint="done"
               disabled={loading || submitting}
             />
           </div>
           {error && <p className="body-small text-danger">{error}</p>}
-          <button className="btn btn-primary" type="submit" disabled={loading || submitting}>
+          <button className="btn btn-primary btn--block" type="submit" disabled={loading || submitting}>
             {submitting ? 'กำลังเข้าร่วม...' : 'เข้าร่วม'}
           </button>
         </form>

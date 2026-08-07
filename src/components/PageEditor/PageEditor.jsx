@@ -9,13 +9,13 @@ const TYPE_LABELS = {
   message: 'ข้อความ',
 };
 
-export default function PageEditor({ sessionId, pages }) {
+export default function PageEditor({ ownerId, scope = 'sessions', pages, onChanged }) {
   const [addingType, setAddingType] = useState(null);
   const [newPageId, setNewPageId] = useState(null);
   const [editingPageId, setEditingPageId] = useState(null);
 
   function startAdding(type) {
-    setNewPageId(newPageRef(sessionId).id);
+    setNewPageId(newPageRef(ownerId, scope).id);
     setAddingType(type);
     setEditingPageId(null);
   }
@@ -25,20 +25,27 @@ export default function PageEditor({ sessionId, pages }) {
     setNewPageId(null);
   }
 
+  async function notifyChanged() {
+    if (onChanged) await onChanged();
+  }
+
   async function handleMove(index, direction) {
     const target = index + direction;
     if (target < 0 || target >= pages.length) return;
     const next = [...pages];
     [next[index], next[target]] = [next[target], next[index]];
     await reorderPages(
-      sessionId,
-      next.map((p) => p.id)
+      ownerId,
+      next.map((p) => p.id),
+      scope
     );
+    await notifyChanged();
   }
 
   async function handleDelete(pageId) {
     if (!window.confirm('ลบหน้านี้ใช่หรือไม่?')) return;
-    await deletePage(sessionId, pageId);
+    await deletePage(ownerId, pageId, scope);
+    await notifyChanged();
   }
 
   return (
@@ -49,7 +56,7 @@ export default function PageEditor({ sessionId, pages }) {
         <div key={page.id}>
           <div className="row-between card">
             <div className="row" style={{ gap: 'var(--space-3)', minWidth: 0 }}>
-              <span className="badge">{TYPE_LABELS[page.type]}</span>
+              <span className="badge">{TYPE_LABELS[page.type] || page.type}</span>
               <span
                 className="body-text"
                 style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -86,12 +93,16 @@ export default function PageEditor({ sessionId, pages }) {
           </div>
           {editingPageId === page.id && (
             <PageForm
-              sessionId={sessionId}
+              ownerId={ownerId}
+              scope={scope}
               pageId={page.id}
               order={page.order}
               type={page.type}
               initialData={page}
-              onSaved={() => setEditingPageId(null)}
+              onSaved={async () => {
+                setEditingPageId(null);
+                await notifyChanged();
+              }}
               onCancel={() => setEditingPageId(null)}
             />
           )}
@@ -100,12 +111,16 @@ export default function PageEditor({ sessionId, pages }) {
 
       {addingType && (
         <PageForm
-          sessionId={sessionId}
+          ownerId={ownerId}
+          scope={scope}
           pageId={newPageId}
           order={pages.length}
           type={addingType}
           initialData={null}
-          onSaved={cancelAdding}
+          onSaved={async () => {
+            cancelAdding();
+            await notifyChanged();
+          }}
           onCancel={cancelAdding}
         />
       )}

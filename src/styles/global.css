@@ -85,6 +85,16 @@ a {
   margin: 0 auto;
 }
 
+.page-padded--mobile {
+  padding: max(var(--space-3), env(safe-area-inset-top)) max(var(--space-3), env(safe-area-inset-right))
+    max(var(--space-5), env(safe-area-inset-bottom)) max(var(--space-3), env(safe-area-inset-left));
+  max-width: 480px;
+}
+
+.page--participant {
+  min-height: 100dvh;
+}
+
 .stack {
   display: flex;
   flex-direction: column;
@@ -236,6 +246,93 @@ a {
   }
 }
 
+.btn--block {
+  width: 100%;
+  min-height: 48px;
+  justify-content: center;
+}
+
+.textarea--mobile {
+  min-height: 96px;
+  font-size: 16px; /* avoid iOS zoom */
+}
+
+/* ---------- participant mobile-first ---------- */
+
+.participant-shell {
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+
+.participant-header {
+  gap: var(--space-2);
+}
+
+.participant-title {
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+@media (min-width: 480px) {
+  .participant-title {
+    font-size: 28px;
+  }
+}
+
+.participant-form {
+  gap: var(--space-2);
+}
+
+.participant-live {
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-color);
+}
+
+.answer-live-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+@media (min-width: 420px) {
+  .answer-live-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+}
+
+.answer-live-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+
+.answer-live-card .answer-text {
+  font-size: 14px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.answer-live-card .answer-name {
+  margin-top: var(--space-2);
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.empty-state--mobile {
+  min-height: 70dvh;
+  padding: var(--space-4);
+  text-align: center;
+  gap: var(--space-2);
+}
+
 /* ---------- badges / pills ---------- */
 
 .badge {
@@ -329,20 +426,25 @@ a {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  z-index: 2;
 }
 
 .floating-answer {
   position: absolute;
-  bottom: 0;
+  box-sizing: border-box;
   max-width: 320px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: var(--space-3);
-  animation-name: floatUp;
-  animation-timing-function: ease-in-out;
-  animation-fill-mode: forwards;
   box-shadow: 0 1px 3px rgba(62, 43, 34, 0.08);
+  overflow: hidden;
+}
+
+.floating-answer--stay {
+  animation-name: floatInStay;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
 }
 
 .floating-answer .answer-text {
@@ -359,41 +461,45 @@ a {
 }
 
 .floating-layer--tv .floating-answer {
-  max-width: 380px;
-  padding: var(--space-3) var(--space-4);
+  max-width: none;
+  padding: var(--space-2) var(--space-3);
 }
 
 .floating-layer--tv .floating-answer .answer-text {
-  font-size: 20px;
+  font-size: 18px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .floating-layer--mobile .floating-answer {
-  max-width: 220px;
+  max-width: none;
   padding: var(--space-2) var(--space-3);
 }
 
 .floating-layer--mobile .floating-answer .answer-text {
   font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-@keyframes floatUp {
-  0%   { opacity: 0; transform: translate(0, 0) scale(0.9); }
-  10%  { opacity: 1; transform: translate(0, -10%) scale(1); }
-  90%  { opacity: 1; }
-  100% { opacity: 0; transform: translate(var(--drift-x, 20px), -100%) scale(1); }
+@keyframes floatInStay {
+  0%   { opacity: 0; transform: translate(var(--drift-x, 0px), 28px) scale(0.92); }
+  100% { opacity: 1; transform: translate(var(--drift-x, 0px), 0) scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .floating-answer {
-    animation-name: fadeInOnly;
+  .floating-answer--stay {
+    animation-name: fadeInStay;
   }
 }
 
-@keyframes fadeInOnly {
+@keyframes fadeInStay {
   0% { opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 /* ---------- spotlight (showOnTV / showOnMobile) ---------- */
@@ -407,6 +513,21 @@ a {
   justify-content: center;
   align-items: center;
   padding: var(--space-4);
+}
+
+.spotlight-layer--inline {
+  padding: 0;
+  justify-content: stretch;
+}
+
+.spotlight-layer--inline .spotlight-card {
+  width: 100%;
+  max-width: none;
+  padding: var(--space-3);
+}
+
+.spotlight-layer--inline .spotlight-card .answer-text {
+  font-size: 16px;
 }
 
 .spotlight-card {
@@ -487,7 +608,7 @@ a {
 
 .tv-question-text {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   text-align: center;
   max-width: 90vw;
   padding: 0 var(--space-5);
@@ -501,10 +622,64 @@ a {
 
 .tv-prompts-text {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   text-align: center;
   color: var(--text-secondary);
   margin-top: var(--space-2);
+}
+
+/* Invisible keep-out zone over the main question — floats spawn outside this */
+.tv-question-barrier {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 26%;
+  bottom: 30%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.tv-question-block {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 70vw;
+  text-align: center;
+  padding: var(--space-4);
+}
+
+.tv-question-block--hub {
+  background: var(--bg-surface);
+  border: 2px solid var(--border-color-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: 0 1px 3px rgba(62, 43, 34, 0.08);
+  max-width: min(70vw, 920px);
+}
+
+/* Mind-map connectors (behind cards, above stage bg) */
+.mindmap-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.mindmap-line {
+  stroke: var(--border-color-strong);
+  stroke-width: 0.35;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+.mindmap-hub-dot {
+  fill: var(--color-terracotta);
+  opacity: 0.9;
 }
 
 .tv-video-wrap {

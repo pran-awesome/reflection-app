@@ -1,48 +1,108 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
-const DEFAULT_MAX_ITEMS = 22;
-const DEFAULT_LIFETIME_MS = 5500;
+/**
+ * Non-overlapping TV slots outside the center question barrier.
+ * left/bottom/w/h are % of the viewport.
+ */
+const TV_SLOTS = [
+  { left: 1.5, bottom: 4, w: 15.5, h: 13 },
+  { left: 1.5, bottom: 19, w: 15.5, h: 13 },
+  { left: 1.5, bottom: 34, w: 15.5, h: 13 },
+  { left: 1.5, bottom: 49, w: 15.5, h: 13 },
+  { left: 1.5, bottom: 64, w: 15.5, h: 13 },
+  { left: 1.5, bottom: 79, w: 15.5, h: 13 },
+  { left: 83, bottom: 4, w: 15.5, h: 13 },
+  { left: 83, bottom: 19, w: 15.5, h: 13 },
+  { left: 83, bottom: 34, w: 15.5, h: 13 },
+  { left: 83, bottom: 49, w: 15.5, h: 13 },
+  { left: 83, bottom: 64, w: 15.5, h: 13 },
+  { left: 83, bottom: 79, w: 15.5, h: 13 },
+  { left: 20, bottom: 2, w: 18, h: 12 },
+  { left: 41, bottom: 2, w: 18, h: 12 },
+  { left: 62, bottom: 2, w: 18, h: 12 },
+  { left: 20, bottom: 15, w: 18, h: 12 },
+  { left: 41, bottom: 15, w: 18, h: 12 },
+  { left: 62, bottom: 15, w: 18, h: 12 },
+];
 
-export function useFloatingQueue(maxItems = DEFAULT_MAX_ITEMS, lifetimeMs = DEFAULT_LIFETIME_MS) {
+function pickFreeSlot(occupiedSlotIndexes, slots) {
+  const free = [];
+  for (let i = 0; i < slots.length; i += 1) {
+    if (!occupiedSlotIndexes.has(i)) free.push(i);
+  }
+  if (free.length === 0) return null;
+  return free[Math.floor(Math.random() * free.length)];
+}
+
+/**
+ * @param {number} [maxItems]
+ * @param {{ layout?: 'tv' | 'grid' }} [options]
+ * layout `grid` = ordered list for CSS grid (participant mobile)
+ * layout `tv` = absolute non-overlapping slots
+ */
+export function useFloatingQueue(maxItems = 12, { layout = 'grid' } = {}) {
   const [items, setItems] = useState([]);
-  const timers = useRef(new Map());
+  const isGrid = layout === 'grid';
+  const slots = TV_SLOTS;
+  const cap = isGrid ? maxItems : Math.min(maxItems, slots.length);
 
   const remove = useCallback((id) => {
     setItems((prev) => prev.filter((it) => it.id !== id));
-    const t = timers.current.get(id);
-    if (t) {
-      clearTimeout(t);
-      timers.current.delete(id);
-    }
   }, []);
 
   const push = useCallback(
     (data) => {
       const id = data.id ?? `${Date.now()}-${Math.random()}`;
-      const left = 4 + Math.random() * 88; // vw percent, keep away from edges
-      const driftX = Math.round((Math.random() - 0.5) * 160); // px
-      const duration = 4 + Math.random() * 2; // 4-6s per spec
-      const delay = Math.random() * 0.4;
-      const item = { ...data, id, left, driftX, duration, delay };
+      const duration = 0.35 + Math.random() * 0.2;
 
       setItems((prev) => {
-        const next = prev.length >= maxItems ? prev.slice(prev.length - maxItems + 1) : prev;
-        return [...next, item];
+        const existing = prev.find((it) => it.id === id);
+        if (existing) {
+          return prev.map((it) => (it.id === id ? { ...it, ...data, id, duration } : it));
+        }
+
+        if (isGrid) {
+          const next = [...prev, { ...data, id, duration }];
+          return next.length > cap ? next.slice(next.length - cap) : next;
+        }
+
+        let working = [...prev];
+        let occupied = new Set(working.map((it) => it.slotIndex));
+
+        while (working.length >= cap) {
+          working = working.slice(1);
+          occupied = new Set(working.map((it) => it.slotIndex));
+        }
+
+        let slotIndex = pickFreeSlot(occupied, slots);
+        while (slotIndex == null && working.length > 0) {
+          working = working.slice(1);
+          occupied = new Set(working.map((it) => it.slotIndex));
+          slotIndex = pickFreeSlot(occupied, slots);
+        }
+        if (slotIndex == null) {
+          slotIndex = 0;
+          working = [];
+        }
+
+        const slot = slots[slotIndex];
+        return [
+          ...working,
+          {
+            ...data,
+            id,
+            slotIndex,
+            left: slot.left,
+            bottom: slot.bottom,
+            width: slot.w,
+            height: slot.h,
+            duration,
+          },
+        ];
       });
-
-      const t = setTimeout(() => remove(id), (duration + delay) * 1000 + 300);
-      timers.current.set(id, t);
     },
-    [maxItems, remove]
+    [cap, isGrid, slots]
   );
-
-  useEffect(() => {
-    const map = timers.current;
-    return () => {
-      map.forEach((t) => clearTimeout(t));
-      map.clear();
-    };
-  }, []);
 
   return { items, push, remove };
 }

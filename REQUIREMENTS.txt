@@ -42,6 +42,7 @@ Non-goals
 --------------------------------------------------------------------------------
   /host            Host control (prepare + present)
   /host/history    Past sessions + CSV export
+  /host/decks/:id  Edit a saved slide deck (premake, offline from any session)
   /tv              TV display
   /join            Enter display name (encoded in QR)
   /participant     Answer questions (after join)
@@ -113,6 +114,19 @@ sessions/{sessionId}/pages/{pageId}
     startedAt : timestamp | null  // TV seeks from this for sync
   }
 
+decks/{deckId}
+  title      : string (<= 100)
+  pageCount  : number   // denormalized count, refreshed on any page CRUD
+  createdAt  : timestamp
+  updatedAt  : timestamp
+  Purpose: reusable, premade slide sets independent of any session. Edited at
+  /host/decks/:deckId with the same PageEditor/PageForm used for sessions
+  (ownerId=deckId, scope="decks").
+
+decks/{deckId}/pages/{pageId}
+  Same shape as sessions/{sessionId}/pages/{pageId} above (order/type/title/
+  content/videoState).
+
 sessions/{sessionId}/pages/{pageId}/answers/{answerId}
   participantId : string
   name          : string (1–40)
@@ -133,6 +147,10 @@ sessions/{sessionId}/pages/{pageId}/answers/{answerId}
 File: firestore.rules
 
   system/*           read/write open
+  decks              read open
+                     create/update if title string <=100
+                     delete allowed (cascades pages client-side, see deckService)
+  decks/pages        read open; create/update if type in enum; delete allowed
   sessions           read open
                      create/update if title string <=100 and status in enum
                      delete denied
@@ -145,8 +163,10 @@ File: firestore.rules
                      update if name/text still within limits (host toggles)
                      delete denied
 
-Indexes: firestore.indexes.json currently empty (single-field + client
-orderBy/limit sufficient for current queries).
+Indexes: firestore.indexes.json currently empty. Both queries that need
+ordering — decks list (orderBy updatedAt desc) and pages within a deck/session
+(orderBy order asc) — are single-field orderBy on their own collection, which
+Firestore indexes automatically; no composite index required.
 
 
 6. SESSION LIFECYCLE
@@ -168,18 +188,51 @@ orderBy/limit sufficient for current queries).
 8. Host "จบงาน" -> status=ended, endedAt=now
 9. History at /host/history lists sessions; CSV export client-side
 
+6.1 SAVED DECK FLOW (premake ahead of event day, one-button present)
+  a. Save a deck
+     - From the idle draft (step 3 above), host taps "บันทึกเป็นชุดสไลด์"
+     - saveSessionAsDeck(sessionId, title): creates decks/{deckId} first
+       (pageCount=0) then copies pages/{sessionId->deckId} via copyPages(),
+       then updates pageCount. Deck doc always exists before its pages, so a
+       failed copy never leaves orphaned subcollection docs with no parent.
+     - The draft session itself is untouched (still idle, still editable /
+       startable directly) — saving as a deck does not consume the draft.
+  b. Edit a deck any time, independent of any session
+     - /host/decks/:deckId (DeckEditPage) reuses PageEditor/PageForm with
+       ownerId=deckId, scope="decks" — same CRUD/reorder/video upload as
+       session pages.
+  c. Present a deck (event day, one button)
+     - Host taps "▶ นำเสนอ" on a saved deck (confirm dialog; different wording
+       if something is already presenting).
+     - presentDeck(deckId): creates a brand-new sessions/{id} (status=
+       presenting, fromDeckId=deckId), copies the deck's pages into it via
+       copyPages(), then flips system/currentSession.activeSessionId to the
+       new session. Fixed links /tv /join /participant pick it up immediately
+       via their existing pointer listener — no URL/session id needed.
+     - Whatever session the pointer previously pointed to (the idle draft, or
+       a session mid-presentation if the host is switching decks) is closed
+       out (status=ended, endedAt=now) once the pointer has moved. This keeps
+       /host/history free of dead "กำลังเตรียม"/"กำลังดำเนินการ" rows that can
+       never be reached again.
+     - Saved decks are never mutated by presenting — presenting always copies,
+       so the same deck can be presented repeatedly across events.
+
 
 7. ROLE FUNCTIONAL REQUIREMENTS
 --------------------------------------------------------------------------------
 
 7.1 Host /host
   Prepare (idle)
+    - Saved decks panel: list saved decks (title, page count, updated date),
+      + สร้างชุดใหม่ (blank deck -> /host/decks/:id), ▶ นำเสนอ, ✎ แก้ไข, ลบ
     - Set session title
     - CRUD pages: add/delete/reorder/edit; types question|split_question|video|message
     - split_question: main question text + promptA/promptB labels for the two
       answer boxes
     - Video page: upload .mp4 <= 200MB with progress bar
-    - Start presenting
+    - บันทึกเป็นชุดสไลด์ — save current draft's pages as a new reusable deck
+    - Start presenting (from the draft directly, or via a saved deck's
+      ▶ นำเสนอ — see 6.1)
   Presenting
     - Show current page; prev/next (disabled at ends)
     - Edit pages anytime ("แก้ไขคำถาม") — realtime for others
@@ -294,16 +347,17 @@ src/
   firebase.js             app / db / auth init
   main.jsx
   styles/global.css
-  pages/Host/HostPage.jsx HistoryPage.jsx
+  pages/Host/HostPage.jsx HistoryPage.jsx DeckEditPage.jsx
   pages/TV/TVPage.jsx
   pages/Join/JoinPage.jsx
   pages/Participant/ParticipantPage.jsx
   components/FloatingAnswers/
-  components/PageEditor/  (PageEditor, PageForm, VideoUploader)
-  hooks/                  useCurrentSession, usePages, useAnswers,
-                          useParticipants, useSessions, useFloatingQueue,
-                          useHasAnswered
-  services/               session/page/answer/participant/history/videoUpload
+  components/PageEditor/  (PageEditor, PageForm, VideoUploader — shared by
+                          sessions and decks via ownerId+scope props)
+  hooks/                  useCurrentSession, usePages(ownerId,scope), useDecks,
+                          useAnswers, useParticipants, useSessions,
+                          useFloatingQueue, useHasAnswered
+  services/               session/page/deck/answer/participant/history/videoUpload
   lib/                    auth.js, localStorage.js, csv.js
 server/
   index.js                media API
@@ -371,6 +425,10 @@ Production links
 [ ] Answers float on TV/participant; host spotlight toggles work
 [ ] Host search filters answers by name or text
 [ ] Video upload to VPS, play/pause sync on TV
+[ ] Host can premake a deck, edit it later, and present it with one button;
+    /tv /join keep working with no URL change
+[ ] Presenting a deck ends whatever session the pointer previously held, so
+    /host/history has no unreachable "กำลังเตรียม"/"กำลังดำเนินการ" rows
 [ ] End session keeps history; CSV export works
 [ ] Floating answers stay smooth with many submissions (DOM capped)
 [ ] Design tokens / Sarabun / Thai UI consistent

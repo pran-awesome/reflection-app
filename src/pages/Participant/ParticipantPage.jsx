@@ -12,18 +12,35 @@ import { getJoinedFlag, getStoredName } from '../../lib/localStorage';
 import { submitAnswer, submitSplitAnswer } from '../../services/answerService';
 import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
 
-function QuestionAnswer({ sessionId, page, participantId }) {
-  const [text, setText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const hasAnswered = useHasAnswered(sessionId, page.id, participantId);
-
-  const { items, push, remove } = useFloatingQueue(12);
+function LiveAnswers({ sessionId, page }) {
+  const { items, push } = useFloatingQueue(12, { layout: 'grid' });
   const answers = useAnswers(sessionId, page.id, {
     limitCount: 30,
     onAdded: (answer) =>
       push({ id: answer.id, name: answer.name, text: formatAnswerDisplay(answer) }),
   });
+
+  return (
+    <section className="participant-live stack">
+      <Spotlight answers={answers} field="showOnMobile" page={page} />
+      <div className="row-between" style={{ alignItems: 'baseline' }}>
+        <h2 className="h2">คำตอบจากผู้ร่วมงาน</h2>
+        <span className="caption">{items.length} ข้อความ</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="body-small">ยังไม่มีคำตอบ — คำตอบใหม่จะปรากฏที่นี่</p>
+      ) : (
+        <FloatingAnswers items={items} variant="grid" />
+      )}
+    </section>
+  );
+}
+
+function QuestionAnswer({ sessionId, page, participantId }) {
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const hasAnswered = useHasAnswered(sessionId, page.id, participantId);
 
   useEffect(() => {
     setText('');
@@ -49,32 +66,40 @@ function QuestionAnswer({ sessionId, page, participantId }) {
   }
 
   return (
-    <div className="stack" style={{ position: 'relative', minHeight: '70vh' }}>
-      <h1 className="h1">{page.title}</h1>
+    <div className="participant-shell stack">
+      <header className="participant-header stack">
+        <p className="caption">{getStoredName() || 'ผู้เข้าร่วม'}</p>
+        <h1 className="h1 participant-title">{page.title}</h1>
+      </header>
 
       {hasAnswered ? (
         <div className="card">
-          <p className="body-text">ส่งคำตอบแล้ว ขอบคุณค่ะ 🙏</p>
+          <p className="body-text">ส่งคำตอบแล้ว ขอบคุณค่ะ</p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="stack">
+        <form onSubmit={handleSubmit} className="stack participant-form">
+          <label className="field-label" htmlFor="answer-text">
+            คำตอบของคุณ
+          </label>
           <textarea
-            className="textarea"
+            id="answer-text"
+            className="textarea textarea--mobile"
             value={text}
             maxLength={280}
+            rows={4}
             onChange={(e) => setText(e.target.value)}
             placeholder="พิมพ์คำตอบของคุณ..."
+            enterKeyHint="send"
           />
           <span className="caption">{text.length}/280</span>
           {error && <p className="body-small text-danger">{error}</p>}
-          <button className="btn btn-primary" type="submit" disabled={submitting}>
+          <button className="btn btn-primary btn--block" type="submit" disabled={submitting}>
             {submitting ? 'กำลังส่ง...' : 'ส่งคำตอบ'}
           </button>
         </form>
       )}
 
-      <Spotlight answers={answers} field="showOnMobile" page={page} />
-      <FloatingAnswers items={items} remove={remove} variant="mobile" />
+      <LiveAnswers sessionId={sessionId} page={page} />
     </div>
   );
 }
@@ -85,13 +110,6 @@ function SplitQuestionAnswer({ sessionId, page, participantId }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const hasAnswered = useHasAnswered(sessionId, page.id, participantId);
-
-  const { items, push, remove } = useFloatingQueue(12);
-  const answers = useAnswers(sessionId, page.id, {
-    limitCount: 30,
-    onAdded: (answer) =>
-      push({ id: answer.id, name: answer.name, text: formatAnswerDisplay(answer) }),
-  });
 
   useEffect(() => {
     setTextA('');
@@ -122,33 +140,44 @@ function SplitQuestionAnswer({ sessionId, page, participantId }) {
   const promptB = page.content?.promptB || 'ช่องที่ 2';
 
   return (
-    <div className="stack" style={{ position: 'relative', minHeight: '70vh' }}>
-      <h1 className="h1">{page.title}</h1>
+    <div className="participant-shell stack">
+      <header className="participant-header stack">
+        <p className="caption">{getStoredName() || 'ผู้เข้าร่วม'}</p>
+        <h1 className="h1 participant-title">{page.title}</h1>
+      </header>
 
       {hasAnswered ? (
         <div className="card">
-          <p className="body-text">ส่งคำตอบแล้ว ขอบคุณค่ะ 🙏</p>
+          <p className="body-text">ส่งคำตอบแล้ว ขอบคุณค่ะ</p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="stack">
+        <form onSubmit={handleSubmit} className="stack participant-form">
           <div className="split-answer-grid">
             <div className="stack">
-              <label className="field-label">{promptA}</label>
+              <label className="field-label" htmlFor="answer-a">
+                {promptA}
+              </label>
               <textarea
-                className="textarea"
+                id="answer-a"
+                className="textarea textarea--mobile"
                 value={textA}
                 maxLength={280}
+                rows={3}
                 onChange={(e) => setTextA(e.target.value)}
                 placeholder="พิมพ์คำตอบ..."
               />
               <span className="caption">{textA.length}/280</span>
             </div>
             <div className="stack">
-              <label className="field-label">{promptB}</label>
+              <label className="field-label" htmlFor="answer-b">
+                {promptB}
+              </label>
               <textarea
-                className="textarea"
+                id="answer-b"
+                className="textarea textarea--mobile"
                 value={textB}
                 maxLength={280}
+                rows={3}
                 onChange={(e) => setTextB(e.target.value)}
                 placeholder="พิมพ์คำตอบ..."
               />
@@ -156,14 +185,21 @@ function SplitQuestionAnswer({ sessionId, page, participantId }) {
             </div>
           </div>
           {error && <p className="body-small text-danger">{error}</p>}
-          <button className="btn btn-primary" type="submit" disabled={submitting}>
+          <button className="btn btn-primary btn--block" type="submit" disabled={submitting}>
             {submitting ? 'กำลังส่ง...' : 'ส่งคำตอบ'}
           </button>
         </form>
       )}
 
-      <Spotlight answers={answers} field="showOnMobile" page={page} />
-      <FloatingAnswers items={items} remove={remove} variant="mobile" />
+      <LiveAnswers sessionId={sessionId} page={page} />
+    </div>
+  );
+}
+
+function ParticipantShell({ children }) {
+  return (
+    <div className="page page--participant">
+      <div className="page-padded page-padded--mobile">{children}</div>
     </div>
   );
 }
@@ -183,31 +219,33 @@ export default function ParticipantPage() {
 
   if (loading || !participantId) {
     return (
-      <div className="page">
-        <div className="empty-state">
+      <ParticipantShell>
+        <div className="empty-state empty-state--mobile">
           <p className="body-text">กำลังโหลด...</p>
         </div>
-      </div>
+      </ParticipantShell>
     );
   }
 
   if (!session || session.status === 'idle') {
     return (
-      <div className="page">
-        <div className="empty-state">
+      <ParticipantShell>
+        <div className="empty-state empty-state--mobile">
           <p className="h2">รอเริ่มงาน...</p>
+          <p className="body-small">พิธีกรกำลังเตรียมคำถาม</p>
         </div>
-      </div>
+      </ParticipantShell>
     );
   }
 
   if (session.status === 'ended') {
     return (
-      <div className="page">
-        <div className="empty-state">
-          <p className="h2">งานนี้จบแล้ว ขอบคุณที่เข้าร่วม 🙏</p>
+      <ParticipantShell>
+        <div className="empty-state empty-state--mobile">
+          <p className="h2">งานนี้จบแล้ว</p>
+          <p className="body-text text-secondary">ขอบคุณที่เข้าร่วม</p>
         </div>
-      </div>
+      </ParticipantShell>
     );
   }
 
@@ -216,31 +254,30 @@ export default function ParticipantPage() {
 
   if (!currentPage) {
     return (
-      <div className="page">
-        <div className="empty-state">
-          <p className="h2">กำลังจะเริ่มเร็วๆ นี้ โปรดรอสักครู่</p>
+      <ParticipantShell>
+        <div className="empty-state empty-state--mobile">
+          <p className="h2">กำลังจะเริ่มเร็วๆ นี้</p>
+          <p className="body-small">โปรดรอสักครู่</p>
         </div>
-      </div>
+      </ParticipantShell>
     );
   }
 
   if (isAnswerPage(currentPage.type)) {
     const AnswerUI = currentPage.type === 'split_question' ? SplitQuestionAnswer : QuestionAnswer;
     return (
-      <div className="page">
-        <div className="page-padded">
-          <AnswerUI sessionId={sessionId} page={currentPage} participantId={participantId} />
-        </div>
-      </div>
+      <ParticipantShell>
+        <AnswerUI sessionId={sessionId} page={currentPage} participantId={participantId} />
+      </ParticipantShell>
     );
   }
 
   return (
-    <div className="page">
-      <div className="empty-state">
+    <ParticipantShell>
+      <div className="empty-state empty-state--mobile">
         <p className="h2">กำลังฉายอยู่บนจอทีวี</p>
-        <p className="body-text text-secondary">โปรดดูที่จอทีวี</p>
+        <p className="body-text text-secondary">โปรดดูที่จอใหญ่</p>
       </div>
-    </div>
+    </ParticipantShell>
   );
 }

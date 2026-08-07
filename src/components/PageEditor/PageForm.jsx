@@ -9,7 +9,16 @@ const TYPE_LABELS = {
   message: 'ข้อความ',
 };
 
-export default function PageForm({ sessionId, pageId, order, type, initialData, onSaved, onCancel }) {
+export default function PageForm({
+  ownerId,
+  scope = 'sessions',
+  pageId,
+  order,
+  type,
+  initialData,
+  onSaved,
+  onCancel,
+}) {
   const [text, setText] = useState(initialData?.title || '');
   const [promptA, setPromptA] = useState(initialData?.content?.promptA || '');
   const [promptB, setPromptB] = useState(initialData?.content?.promptB || '');
@@ -54,7 +63,7 @@ export default function PageForm({ sessionId, pageId, order, type, initialData, 
       content = { videoUrl, videoStoragePath };
     }
     try {
-      await savePage(sessionId, pageId, { order, type, title, content });
+      await savePage(ownerId, pageId, { order, type, title, content }, scope);
       onSaved();
     } catch (err) {
       setError('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง');
@@ -120,7 +129,7 @@ export default function PageForm({ sessionId, pageId, order, type, initialData, 
             <input className="input" value={text} maxLength={100} onChange={(e) => setText(e.target.value)} />
           </div>
           <VideoUploader
-            sessionId={sessionId}
+            sessionId={ownerId}
             pageId={pageId}
             videoUrl={videoUrl}
             onUploaded={(url, path) => {

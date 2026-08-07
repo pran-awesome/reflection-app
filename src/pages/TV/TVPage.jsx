@@ -6,6 +6,7 @@ import { useParticipantCount } from '../../hooks/useParticipants';
 import { useAnswers } from '../../hooks/useAnswers';
 import { useFloatingQueue } from '../../hooks/useFloatingQueue';
 import FloatingAnswers from '../../components/FloatingAnswers/FloatingAnswers';
+import MindMapLines from '../../components/FloatingAnswers/MindMapLines';
 import Spotlight from '../../components/FloatingAnswers/Spotlight';
 import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
 
@@ -64,7 +65,7 @@ export default function TVPage() {
   const currentPage = currentPageIndex >= 0 ? pages[currentPageIndex] : null;
   const isQuestionPage = isAnswerPage(currentPage?.type);
 
-  const { items: floatingItems, push: pushFloating, remove: removeFloating } = useFloatingQueue();
+  const { items: floatingItems, push: pushFloating } = useFloatingQueue(18, { layout: 'tv' });
 
   const answers = useAnswers(sessionId, isQuestionPage ? currentPage.id : null, {
     limitCount: 30,
@@ -125,14 +126,19 @@ export default function TVPage() {
       <div className="tv-topbar">
         <span className="badge badge-sage">เข้าร่วมแล้ว {participantCount} คน</span>
       </div>
-      <p className="display-text tv-question-text">{currentPage.title}</p>
-      {currentPage.type === 'split_question' && (
-        <p className="body-text tv-prompts-text">
-          {currentPage.content?.promptA || 'ช่องที่ 1'} · {currentPage.content?.promptB || 'ช่องที่ 2'}
-        </p>
-      )}
+      {/* Invisible keep-out zone so floating answers never cover the question */}
+      <div className="tv-question-barrier" aria-hidden="true" />
+      <div className="tv-question-block tv-question-block--hub">
+        <p className="display-text tv-question-text">{currentPage.title}</p>
+        {currentPage.type === 'split_question' && (
+          <p className="body-text tv-prompts-text">
+            {currentPage.content?.promptA || 'ช่องที่ 1'} · {currentPage.content?.promptB || 'ช่องที่ 2'}
+          </p>
+        )}
+      </div>
+      <MindMapLines items={floatingItems} />
       <Spotlight answers={answers} field="showOnTV" />
-      <FloatingAnswers items={floatingItems} remove={removeFloating} variant="tv" />
+      <FloatingAnswers items={floatingItems} variant="tv" />
     </div>
   );
 }

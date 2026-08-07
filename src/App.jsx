@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import HostPage from './pages/Host/HostPage';
 import HistoryPage from './pages/Host/HistoryPage';
+import DeckEditPage from './pages/Host/DeckEditPage';
 import TVPage from './pages/TV/TVPage';
 import JoinPage from './pages/Join/JoinPage';
 import ParticipantPage from './pages/Participant/ParticipantPage';
@@ -10,6 +11,7 @@ export default function App() {
     <Routes>
       <Route path="/host" element={<HostPage />} />
       <Route path="/host/history" element={<HistoryPage />} />
+      <Route path="/host/decks/:deckId" element={<DeckEditPage />} />
       <Route path="/tv" element={<TVPage />} />
       <Route path="/join" element={<JoinPage />} />
       <Route path="/participant" element={<ParticipantPage />} />

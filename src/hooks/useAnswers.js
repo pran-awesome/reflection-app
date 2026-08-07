@@ -17,13 +17,25 @@ export function useAnswers(sessionId, pageId, { limitCount = 30, onAdded } = {})
       orderBy('createdAt', 'desc'),
       limit(limitCount)
     );
+    let isFirst = true;
     const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAnswers(list);
+
+      if (!onAddedRef.current) return;
+
+      if (isFirst) {
+        isFirst = false;
+        // Seed oldest → newest so the floating queue can drop oldest when full
+        [...list].reverse().forEach((answer) => onAddedRef.current(answer));
+        return;
+      }
+
       snap.docChanges().forEach((change) => {
-        if (change.type === 'added' && onAddedRef.current) {
+        if (change.type === 'added') {
           onAddedRef.current({ id: change.doc.id, ...change.doc.data() });
         }
       });
-      setAnswers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
     return unsub;
   }, [sessionId, pageId, limitCount]);
