@@ -1,6 +1,7 @@
-import { formatAnswerDisplay } from '../../lib/answers';
+import { formatAnswerDisplay, isSplitAnswer } from '../../lib/answers';
+import AnswerText from './AnswerText';
 
-export default function Spotlight({ answers, field, page }) {
+export default function Spotlight({ answers, field, expandable = false }) {
   const spotlighted = answers.filter((a) => a[field]);
   if (spotlighted.length === 0) return null;
 
@@ -8,7 +9,20 @@ export default function Spotlight({ answers, field, page }) {
     <div className="spotlight-layer spotlight-layer--inline">
       {spotlighted.map((a) => (
         <div key={a.id} className="spotlight-card">
-          <p className="answer-text">{formatAnswerDisplay(a)}</p>
+          {isSplitAnswer(a) ? (
+            <AnswerText
+              textA={a.textA}
+              textB={a.textB}
+              expandable={expandable}
+              limit={expandable ? 120 : 100}
+            />
+          ) : (
+            <AnswerText
+              text={formatAnswerDisplay(a)}
+              expandable={expandable}
+              limit={expandable ? 120 : 100}
+            />
+          )}
           <p className="answer-name">— {a.name}</p>
         </div>
       ))}

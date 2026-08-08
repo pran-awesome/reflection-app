@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import PageForm from './PageForm';
 import { deletePage, newPageRef, reorderPages } from '../../services/pageService';
+import { getSlideshowItemText } from '../../lib/slideshow';
 
 const TYPE_LABELS = {
   question: 'คำถาม',
   split_question: 'คำถามสองช่อง',
   video: 'วิดีโอ',
   message: 'ข้อความ',
+  text_slideshow: 'ข้อความต่อเนื่อง',
 };
+
+function pageListLabel(page) {
+  if (page.title) return page.title;
+  if (page.type === 'text_slideshow') return getSlideshowItemText(page.content?.items?.[0]) || '(ยังไม่มีข้อความ)';
+  return '(ไม่มีข้อความ)';
+}
 
 export default function PageEditor({ ownerId, scope = 'sessions', pages, onChanged }) {
   const [addingType, setAddingType] = useState(null);
@@ -61,7 +69,7 @@ export default function PageEditor({ ownerId, scope = 'sessions', pages, onChang
                 className="body-text"
                 style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
-                {page.title || '(ไม่มีข้อความ)'}
+                {pageListLabel(page)}
               </span>
             </div>
             <div className="row">
@@ -138,6 +146,9 @@ export default function PageEditor({ ownerId, scope = 'sessions', pages, onChang
           </button>
           <button className="btn btn-secondary btn-sm" onClick={() => startAdding('message')}>
             + ข้อความ
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => startAdding('text_slideshow')}>
+            + ข้อความต่อเนื่อง
           </button>
         </div>
       )}

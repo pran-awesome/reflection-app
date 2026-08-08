@@ -1,3 +1,5 @@
+import { getSlideshowItemText } from './slideshow';
+
 function escapeCsvField(value) {
   const str = String(value ?? '');
   if (/[",\n]/.test(str)) {
@@ -21,7 +23,11 @@ export function buildSessionCsv(session, pagesWithAnswers) {
   ];
 
   pagesWithAnswers.forEach((page) => {
-    const pageLabel = page.title || page.content?.questionText || page.content?.messageText || '';
+    const pageLabel =
+      page.title ||
+      page.content?.questionText ||
+      page.content?.messageText ||
+      (page.content?.items || []).map(getSlideshowItemText).join(' | ');
     if (!page.answers || page.answers.length === 0) {
       rows.push([page.order + 1, page.type, pageLabel, '', '', '', '', '']);
       return;

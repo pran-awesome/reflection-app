@@ -19,9 +19,22 @@ import {
   saveSessionAsDeck,
 } from '../../services/deckService';
 import { setAnswerShowOnMobile, setAnswerShowOnTV } from '../../services/answerService';
-import { setVideoPlaying } from '../../services/pageService';
+import {
+  resetSlideshow,
+  setSlideshowPlaying,
+  setVideoPlaying,
+  updateSlideshowContent,
+} from '../../services/pageService';
 import PageEditor from '../../components/PageEditor/PageEditor';
+import TextSlideshow from '../../components/TextSlideshow/TextSlideshow';
+import { useSlideshowIndex } from '../../hooks/useSlideshowIndex';
 import { formatAnswerDisplay, formatAnswerSearchBlob, isAnswerPage } from '../../lib/answers';
+import {
+  SLIDESHOW_ANIMATIONS,
+  SLIDESHOW_TRANSITION_SPEEDS,
+  clampDurationSec,
+  clampTransitionMs,
+} from '../../lib/slideshow';
 
 function formatDeckDate(ts) {
   if (!ts?.toDate) return '';
@@ -31,12 +44,12 @@ function formatDeckDate(ts) {
 function AnswerBody({ answer, page }) {
   if (page.type === 'split_question' && (answer.textA != null || answer.textB != null)) {
     return (
-      <div className="stack" style={{ gap: 'var(--space-2)' }}>
-        <div>
+      <div className="answer-split">
+        <div className="answer-split-box">
           <p className="caption text-secondary">{page.content?.promptA || 'ช่องที่ 1'}</p>
           <p className="answer-text">{answer.textA || '—'}</p>
         </div>
-        <div>
+        <div className="answer-split-box">
           <p className="caption text-secondary">{page.content?.promptB || 'ช่องที่ 2'}</p>
           <p className="answer-text">{answer.textB || '—'}</p>
         </div>
@@ -111,6 +124,132 @@ function VideoControl({ sessionId, page }) {
         ⏸ หยุด
       </button>
       <span className="badge">{playing ? 'กำลังเล่น' : 'หยุดอยู่'}</span>
+    </div>
+  );
+}
+
+function TextSlideshowControl({ sessionId, page }) {
+  const { index, items, playing } = useSlideshowIndex(page);
+  const currentAnimation = items[index]?.animation || 'fade';
+  const currentDurationSec = clampDurationSec(items[index]?.durationSec ?? page.content?.durationSec);
+  const transitionMs = clampTransitionMs(page.content?.transitionMs);
+  const defaultDurationSec = clampDurationSec(page.content?.durationSec);
+
+  function setCurrentItemAnimation(nextAnimation) {
+    if (items.length === 0) return;
+    const nextItems = items.map((item, i) => (i === index ? { ...item, animation: nextAnimation } : item));
+    updateSlideshowContent(sessionId, page.id, { items: nextItems });
+  }
+
+  function setCurrentItemDuration(nextDurationSec) {
+    if (items.length === 0) return;
+    const nextItems = items.map((item, i) =>
+      i === index ? { ...item, durationSec: clampDurationSec(nextDurationSec) } : item
+    );
+    updateSlideshowContent(sessionId, page.id, { items: nextItems });
+  }
+
+  return (
+    <div className="stack">
+      <div className="card">
+        <TextSlideshow page={page} variant="host" />
+      </div>
+      <div className="row">
+        <button
+          className="btn btn-primary"
+          onClick={() => setSlideshowPlaying(sessionId, page.id, true, index)}
+          disabled={playing}
+        >
+          ▶ เล่น
+        </button>
+        <button
+          className="btn btn-secondary"
+          onClick={() => setSlideshowPlaying(sessionId, page.id, false, index)}
+          disabled={!playing}
+        >
+          ⏸ หยุด
+        </button>
+        <span className="badge">
+          {items.length === 0 ? 'ยังไม่มีข้อความ' : `ข้อความ ${index + 1}/${items.length}${playing ? '' : ' (หยุดอยู่)'}`}
+        </span>
+      </div>
+      <div className="card stack" style={{ gap: 'var(--space-3)' }}>
+        <p className="caption text-secondary">การเปลี่ยนระหว่างข้อความ (TV / ผู้ร่วมงาน)</p>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 'var(--space-3)' }}>
+          <div>
+            <label className="field-label" htmlFor="live-slide-anim">
+              รูปแบบการเปลี่ยน (ข้อความปัจจุบัน)
+            </label>
+            <select
+              id="live-slide-anim"
+              className="input"
+              value={currentAnimation}
+              disabled={items.length === 0}
+              onChange={(e) => setCurrentItemAnimation(e.target.value)}
+            >
+              {SLIDESHOW_ANIMATIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label" htmlFor="live-slide-speed">
+              ความเร็วการเปลี่ยน
+            </label>
+            <select
+              id="live-slide-speed"
+              className="input"
+              value={transitionMs}
+              onChange={(e) =>
+                updateSlideshowContent(sessionId, page.id, { transitionMs: Number(e.target.value) })
+              }
+            >
+              {SLIDESHOW_TRANSITION_SPEEDS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="field-label" htmlFor="live-slide-duration">
+              วินาที (ข้อความปัจจุบัน)
+            </label>
+            <input
+              id="live-slide-duration"
+              className="input"
+              type="number"
+              min={2}
+              max={15}
+              value={currentDurationSec}
+              disabled={items.length === 0}
+              style={{ width: 100 }}
+              onChange={(e) => setCurrentItemDuration(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="live-slide-default-duration">
+              วินาทีเริ่มต้น (บรรทัดใหม่)
+            </label>
+            <input
+              id="live-slide-default-duration"
+              className="input"
+              type="number"
+              min={2}
+              max={15}
+              value={defaultDurationSec}
+              style={{ width: 100 }}
+              onChange={(e) =>
+                updateSlideshowContent(sessionId, page.id, {
+                  durationSec: clampDurationSec(e.target.value),
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -251,6 +390,17 @@ export default function HostPage() {
     setTitleDraft(session?.title || '');
   }, [session?.id, session?.title]);
 
+  const currentPageIndex = session?.currentPageIndex ?? -1;
+  const currentPage = currentPageIndex >= 0 ? pages[currentPageIndex] : null;
+
+  async function goToPageIndex(newIndex) {
+    await setCurrentPageIndex(sessionId, newIndex);
+    const target = pages[newIndex];
+    if (target?.type === 'text_slideshow') {
+      resetSlideshow(sessionId, target.id);
+    }
+  }
+
   if (loading || !session || session.status === 'ended') {
     return (
       <div className="page">
@@ -352,8 +502,6 @@ export default function HostPage() {
     );
   }
 
-  const currentPageIndex = session.currentPageIndex ?? -1;
-  const currentPage = currentPageIndex >= 0 ? pages[currentPageIndex] : null;
   const canGoBack = currentPageIndex > 0;
   const canGoNext = currentPageIndex < pages.length - 1;
 
@@ -383,7 +531,7 @@ export default function HostPage() {
         <div className="row-between">
           <button
             className="btn btn-secondary"
-            onClick={() => setCurrentPageIndex(sessionId, currentPageIndex - 1)}
+            onClick={() => goToPageIndex(currentPageIndex - 1)}
             disabled={!canGoBack}
           >
             ← ย้อนกลับ
@@ -393,7 +541,7 @@ export default function HostPage() {
           </span>
           <button
             className="btn btn-primary"
-            onClick={() => setCurrentPageIndex(sessionId, currentPageIndex + 1)}
+            onClick={() => goToPageIndex(currentPageIndex + 1)}
             disabled={!canGoNext}
           >
             ถัดไป →
@@ -443,6 +591,13 @@ export default function HostPage() {
             <div className="card">
               <p className="body-text">{currentPage.title}</p>
             </div>
+          </div>
+        )}
+
+        {currentPage?.type === 'text_slideshow' && (
+          <div className="stack">
+            <h2 className="h2">{currentPage.title || 'ข้อความต่อเนื่อง'}</h2>
+            <TextSlideshowControl sessionId={sessionId} page={currentPage} />
           </div>
         )}
       </div>

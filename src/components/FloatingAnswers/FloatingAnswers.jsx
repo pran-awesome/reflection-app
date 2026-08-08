@@ -1,4 +1,9 @@
+import AnswerText from './AnswerText';
+
 export default function FloatingAnswers({ items, variant = 'tv' }) {
+  const expandable = variant === 'grid';
+  const limit = variant === 'tv' ? 72 : 90;
+
   if (variant === 'grid') {
     return (
       <div className="answer-live-grid" aria-live="polite">
@@ -8,7 +13,13 @@ export default function FloatingAnswers({ items, variant = 'tv' }) {
             className="answer-live-card floating-answer--stay"
             style={{ animationDuration: `${item.duration || 0.4}s` }}
           >
-            <p className="answer-text">{item.text}</p>
+            <AnswerText
+              text={item.text}
+              textA={item.textA}
+              textB={item.textB}
+              expandable={expandable}
+              limit={limit}
+            />
             <p className="answer-name">{item.name}</p>
           </article>
         ))}
@@ -30,7 +41,13 @@ export default function FloatingAnswers({ items, variant = 'tv' }) {
             animationDuration: `${item.duration || 0.5}s`,
           }}
         >
-          <p className="answer-text">{item.text}</p>
+          <AnswerText
+            text={item.text}
+            textA={item.textA}
+            textB={item.textB}
+            expandable={false}
+            limit={limit}
+          />
           <p className="answer-name">{item.name}</p>
         </div>
       ))}

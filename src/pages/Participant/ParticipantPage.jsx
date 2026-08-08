@@ -7,22 +7,23 @@ import { useHasAnswered } from '../../hooks/useHasAnswered';
 import { useFloatingQueue } from '../../hooks/useFloatingQueue';
 import FloatingAnswers from '../../components/FloatingAnswers/FloatingAnswers';
 import Spotlight from '../../components/FloatingAnswers/Spotlight';
+import SlideTransition from '../../components/SlideTransition/SlideTransition';
+import TextSlideshow from '../../components/TextSlideshow/TextSlideshow';
 import { ensureAnonymousAuth } from '../../lib/auth';
 import { getJoinedFlag, getStoredName } from '../../lib/localStorage';
 import { submitAnswer, submitSplitAnswer } from '../../services/answerService';
-import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
+import { isAnswerPage, toFloatingItem } from '../../lib/answers';
 
 function LiveAnswers({ sessionId, page }) {
   const { items, push } = useFloatingQueue(12, { layout: 'grid' });
   const answers = useAnswers(sessionId, page.id, {
     limitCount: 30,
-    onAdded: (answer) =>
-      push({ id: answer.id, name: answer.name, text: formatAnswerDisplay(answer) }),
+    onAdded: (answer) => push(toFloatingItem(answer)),
   });
 
   return (
     <section className="participant-live stack">
-      <Spotlight answers={answers} field="showOnMobile" page={page} />
+      <Spotlight answers={answers} field="showOnMobile" expandable />
       <div className="row-between" style={{ alignItems: 'baseline' }}>
         <h2 className="h2">คำตอบจากผู้ร่วมงาน</h2>
         <span className="caption">{items.length} ข้อความ</span>
@@ -196,10 +197,12 @@ function SplitQuestionAnswer({ sessionId, page, participantId }) {
   );
 }
 
-function ParticipantShell({ children }) {
+function ParticipantShell({ children, slideKey = 'static' }) {
   return (
     <div className="page page--participant">
-      <div className="page-padded page-padded--mobile">{children}</div>
+      <div className="page-padded page-padded--mobile">
+        <SlideTransition slideKey={slideKey}>{children}</SlideTransition>
+      </div>
     </div>
   );
 }
@@ -219,7 +222,7 @@ export default function ParticipantPage() {
 
   if (loading || !participantId) {
     return (
-      <ParticipantShell>
+      <ParticipantShell slideKey="loading">
         <div className="empty-state empty-state--mobile">
           <p className="body-text">กำลังโหลด...</p>
         </div>
@@ -229,7 +232,7 @@ export default function ParticipantPage() {
 
   if (!session || session.status === 'idle') {
     return (
-      <ParticipantShell>
+      <ParticipantShell slideKey="idle">
         <div className="empty-state empty-state--mobile">
           <p className="h2">รอเริ่มงาน...</p>
           <p className="body-small">พิธีกรกำลังเตรียมคำถาม</p>
@@ -240,7 +243,7 @@ export default function ParticipantPage() {
 
   if (session.status === 'ended') {
     return (
-      <ParticipantShell>
+      <ParticipantShell slideKey="ended">
         <div className="empty-state empty-state--mobile">
           <p className="h2">งานนี้จบแล้ว</p>
           <p className="body-text text-secondary">ขอบคุณที่เข้าร่วม</p>
@@ -254,7 +257,7 @@ export default function ParticipantPage() {
 
   if (!currentPage) {
     return (
-      <ParticipantShell>
+      <ParticipantShell slideKey="waiting">
         <div className="empty-state empty-state--mobile">
           <p className="h2">กำลังจะเริ่มเร็วๆ นี้</p>
           <p className="body-small">โปรดรอสักครู่</p>
@@ -266,14 +269,32 @@ export default function ParticipantPage() {
   if (isAnswerPage(currentPage.type)) {
     const AnswerUI = currentPage.type === 'split_question' ? SplitQuestionAnswer : QuestionAnswer;
     return (
-      <ParticipantShell>
+      <ParticipantShell slideKey={currentPage.id}>
         <AnswerUI sessionId={sessionId} page={currentPage} participantId={participantId} />
       </ParticipantShell>
     );
   }
 
+  if (currentPage.type === 'text_slideshow') {
+    return (
+      <ParticipantShell slideKey={currentPage.id}>
+        <div className="stack participant-slideshow">
+          <p className="caption" style={{ textAlign: 'center' }}>
+            ดูที่จอทีวีเพื่อประสบการณ์เต็มรูปแบบ
+          </p>
+          {currentPage.title && (
+            <p className="body-text text-secondary" style={{ textAlign: 'center' }}>
+              {currentPage.title}
+            </p>
+          )}
+          <TextSlideshow page={currentPage} variant="participant" />
+        </div>
+      </ParticipantShell>
+    );
+  }
+
   return (
-    <ParticipantShell>
+    <ParticipantShell slideKey="on-tv">
       <div className="empty-state empty-state--mobile">
         <p className="h2">กำลังฉายอยู่บนจอทีวี</p>
         <p className="body-text text-secondary">โปรดดูที่จอใหญ่</p>

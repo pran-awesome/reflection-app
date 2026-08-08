@@ -22,7 +22,7 @@ service cloud.firestore {
 
       match /pages/{pageId} {
         allow read: if true;
-        allow create, update: if request.resource.data.type in ['question', 'split_question', 'video', 'message'];
+        allow create, update: if request.resource.data.type in ['question', 'split_question', 'video', 'message', 'text_slideshow'];
         allow delete: if true;
       }
     }
@@ -42,7 +42,7 @@ service cloud.firestore {
 
       match /pages/{pageId} {
         allow read: if true;
-        allow create, update: if request.resource.data.type in ['question', 'split_question', 'video', 'message'];
+        allow create, update: if request.resource.data.type in ['question', 'split_question', 'video', 'message', 'text_slideshow'];
         allow delete: if true;
 
         match /answers/{answerId} {

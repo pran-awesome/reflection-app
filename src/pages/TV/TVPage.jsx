@@ -8,7 +8,9 @@ import { useFloatingQueue } from '../../hooks/useFloatingQueue';
 import FloatingAnswers from '../../components/FloatingAnswers/FloatingAnswers';
 import MindMapLines from '../../components/FloatingAnswers/MindMapLines';
 import Spotlight from '../../components/FloatingAnswers/Spotlight';
-import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
+import SlideTransition from '../../components/SlideTransition/SlideTransition';
+import TextSlideshow from '../../components/TextSlideshow/TextSlideshow';
+import { isAnswerPage, toFloatingItem } from '../../lib/answers';
 
 function TvVideo({ page }) {
   const videoRef = useRef(null);
@@ -69,8 +71,7 @@ export default function TVPage() {
 
   const answers = useAnswers(sessionId, isQuestionPage ? currentPage.id : null, {
     limitCount: 30,
-    onAdded: (answer) =>
-      pushFloating({ id: answer.id, name: answer.name, text: formatAnswerDisplay(answer) }),
+    onAdded: (answer) => pushFloating(toFloatingItem(answer)),
   });
 
   if (loading) {
@@ -80,7 +81,9 @@ export default function TVPage() {
   if (!session || session.status === 'idle') {
     return (
       <div className="tv-stage">
-        <p className="h2">รอเริ่มงาน...</p>
+        <SlideTransition slideKey="idle">
+          <p className="h2">รอเริ่มงาน...</p>
+        </SlideTransition>
       </div>
     );
   }
@@ -88,9 +91,11 @@ export default function TVPage() {
   if (session.status === 'ended') {
     return (
       <div className="tv-stage">
-        <p className="display-text" style={{ textAlign: 'center' }}>
-          ขอบคุณที่เข้าร่วมกิจกรรม
-        </p>
+        <SlideTransition slideKey="ended">
+          <p className="display-text" style={{ textAlign: 'center' }}>
+            ขอบคุณที่เข้าร่วมกิจกรรม
+          </p>
+        </SlideTransition>
       </div>
     );
   }
@@ -99,7 +104,9 @@ export default function TVPage() {
   if (!currentPage) {
     return (
       <div className="tv-stage">
-        <QrJoinScreen participantCount={participantCount} />
+        <SlideTransition slideKey="qr">
+          <QrJoinScreen participantCount={participantCount} />
+        </SlideTransition>
       </div>
     );
   }
@@ -107,7 +114,20 @@ export default function TVPage() {
   if (currentPage.type === 'video') {
     return (
       <div className="tv-stage">
-        <TvVideo page={currentPage} />
+        <SlideTransition slideKey={currentPage.id}>
+          <TvVideo page={currentPage} />
+        </SlideTransition>
+      </div>
+    );
+  }
+
+  if (currentPage.type === 'text_slideshow') {
+    return (
+      <div className="tv-stage">
+        <SlideTransition slideKey={currentPage.id}>
+          {currentPage.title && <p className="body-text tv-prompts-text tv-slideshow-title">{currentPage.title}</p>}
+          <TextSlideshow page={currentPage} variant="tv" />
+        </SlideTransition>
       </div>
     );
   }
@@ -115,7 +135,9 @@ export default function TVPage() {
   if (currentPage.type === 'message') {
     return (
       <div className="tv-stage">
-        <p className="display-text tv-message-text">{currentPage.title}</p>
+        <SlideTransition slideKey={currentPage.id}>
+          <p className="display-text tv-message-text">{currentPage.title}</p>
+        </SlideTransition>
       </div>
     );
   }
@@ -128,14 +150,11 @@ export default function TVPage() {
       </div>
       {/* Invisible keep-out zone so floating answers never cover the question */}
       <div className="tv-question-barrier" aria-hidden="true" />
-      <div className="tv-question-block tv-question-block--hub">
-        <p className="display-text tv-question-text">{currentPage.title}</p>
-        {currentPage.type === 'split_question' && (
-          <p className="body-text tv-prompts-text">
-            {currentPage.content?.promptA || 'ช่องที่ 1'} · {currentPage.content?.promptB || 'ช่องที่ 2'}
-          </p>
-        )}
-      </div>
+      <SlideTransition slideKey={currentPage.id}>
+        <div className="tv-question-block tv-question-block--hub">
+          <p className="display-text tv-question-text">{currentPage.title}</p>
+        </div>
+      </SlideTransition>
       <MindMapLines items={floatingItems} />
       <Spotlight answers={answers} field="showOnTV" />
       <FloatingAnswers items={floatingItems} variant="tv" />

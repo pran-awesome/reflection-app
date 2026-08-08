@@ -4,6 +4,7 @@ import { useSessions } from '../../hooks/useSessions';
 import { fetchSessionPagesWithAnswers } from '../../services/historyService';
 import { buildSessionCsv, downloadCsv } from '../../lib/csv';
 import { formatAnswerDisplay, isAnswerPage } from '../../lib/answers';
+import { getSlideshowItemText } from '../../lib/slideshow';
 
 const STATUS_LABELS = {
   idle: 'กำลังเตรียม',
@@ -16,6 +17,7 @@ const TYPE_LABELS = {
   split_question: 'คำถามสองช่อง',
   video: 'วิดีโอ',
   message: 'ข้อความ',
+  text_slideshow: 'ข้อความต่อเนื่อง',
 };
 
 function formatDate(ts) {
@@ -26,12 +28,12 @@ function formatDate(ts) {
 function AnswerBody({ answer, page }) {
   if (page.type === 'split_question' && (answer.textA != null || answer.textB != null)) {
     return (
-      <div className="stack" style={{ gap: 'var(--space-2)' }}>
-        <div>
+      <div className="answer-split">
+        <div className="answer-split-box">
           <p className="caption text-secondary">{page.content?.promptA || 'ช่องที่ 1'}</p>
           <p className="answer-text">{answer.textA || '—'}</p>
         </div>
-        <div>
+        <div className="answer-split-box">
           <p className="caption text-secondary">{page.content?.promptB || 'ช่องที่ 2'}</p>
           <p className="answer-text">{answer.textB || '—'}</p>
         </div>
@@ -114,6 +116,15 @@ export default function HistoryPage() {
                             {page.title || '(ไม่มีข้อความ)'}
                           </span>
                         </div>
+                        {page.type === 'text_slideshow' && (
+                          <div className="stack" style={{ gap: 'var(--space-1)', marginBottom: 'var(--space-2)' }}>
+                            {(page.content?.items || []).map((item, i) => (
+                              <p key={i} className="body-small">
+                                {i + 1}. {getSlideshowItemText(item)}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                         {isAnswerPage(page.type) ? (
                           page.answers.length === 0 ? (
                             <p className="body-small">ไม่มีคำตอบ</p>

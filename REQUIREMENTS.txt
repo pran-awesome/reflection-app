@@ -5,7 +5,7 @@ Document purpose : Single source of truth for product behavior + implementation
 Language of UI   : Thai
 Repo             : https://github.com/pran-awesome/reflection-app
 Production URL   : https://water-drop-93a56.web.app
-Last updated     : 2026-08-07
+Last updated     : 2026-08-07 (added text_slideshow page type)
 ================================================================================
 
 
@@ -99,7 +99,7 @@ sessions/{sessionId}/participants/{participantId}
 
 sessions/{sessionId}/pages/{pageId}
   order : number
-  type  : "question" | "split_question" | "video" | "message"
+  type  : "question" | "split_question" | "video" | "message" | "text_slideshow"
   title : string
   content : {
     questionText?      : string   // question/split_question/message main text
@@ -108,11 +108,24 @@ sessions/{sessionId}/pages/{pageId}
     messageText?       : string
     videoUrl?          : string   // public URL from VPS media server
     videoStoragePath?  : string   // relative path under uploads/
+    items?             : string[] // text_slideshow only — ordered list of text lines
+    animation?         : "fade" | "slideUp" | "scaleIn"  // text_slideshow only
+    durationSec?       : number   // text_slideshow only — seconds per item, 2–15 (default 3)
+    loop?              : boolean  // text_slideshow only — default true
   }
   videoState? : {
     playing   : boolean
     startedAt : timestamp | null  // TV seeks from this for sync
   }
+  slideshowState? : {           // text_slideshow only
+    playing    : boolean         // default true (autoplay while page is active)
+    startIndex : number          // item index the current playback/pause segment starts from
+    startedAt  : timestamp | null // TV/participant/host derive elapsed time from this
+  }
+  // text_slideshow: index is derived client-side from content + slideshowState
+  // (see lib/slideshow.js) so every client (TV/participant/host) stays in step
+  // without per-tick writes. Host navigating onto the page resets it to item 0
+  // and autoplay; host can also play/pause like video (freezes at current item).
 
 decks/{deckId}
   title      : string (<= 100)
@@ -155,8 +168,8 @@ File: firestore.rules
                      create/update if title string <=100 and status in enum
                      delete denied
   participants       read open; create/update if name 1–40; delete denied
-  pages              read open; create/update if type in enum (incl. split_question);
-                     delete allowed
+  pages              read open; create/update if type in enum (incl. split_question,
+                     text_slideshow); delete allowed
   answers            read open
                      create if name 1–40 and text 1–600 (600 covers split_question's
                      combined `textA\ntextB`; single-box answers stay <=280 in app)
@@ -175,8 +188,8 @@ Firestore indexes automatically; no composite index required.
 2. ensureDraftSession():
    - If pointer session exists and status != ended -> reuse
    - Else create idle session (currentPageIndex=-1), set pointer
-3. Host edits title + pages (question / split_question / video / message), reorder,
-   upload video
+3. Host edits title + pages (question / split_question / video / message /
+   text_slideshow), reorder, upload video
 4. Host taps "เริ่มงานใหม่" -> status=presenting, currentPageIndex=-1
 5. TV shows QR for /join + live participant count
 6. Host next/prev changes currentPageIndex; all clients follow via onSnapshot
@@ -226,10 +239,14 @@ Firestore indexes automatically; no composite index required.
     - Saved decks panel: list saved decks (title, page count, updated date),
       + สร้างชุดใหม่ (blank deck -> /host/decks/:id), ▶ นำเสนอ, ✎ แก้ไข, ลบ
     - Set session title
-    - CRUD pages: add/delete/reorder/edit; types question|split_question|video|message
+    - CRUD pages: add/delete/reorder/edit; types question|split_question|video|
+      message|text_slideshow
     - split_question: main question text + promptA/promptB labels for the two
       answer boxes
     - Video page: upload .mp4 <= 200MB with progress bar
+    - text_slideshow page: optional title/section label, ordered list of text
+      lines (one per line), animation (fade/slideUp/scaleIn), seconds per item
+      (2–15, default 3), loop toggle (default on)
     - บันทึกเป็นชุดสไลด์ — save current draft's pages as a new reusable deck
     - Start presenting (from the draft directly, or via a saved deck's
       ▶ นำเสนอ — see 6.1)
@@ -243,6 +260,10 @@ Firestore indexes automatically; no composite index required.
       * split_question answers show both boxes labeled with promptA/promptB
       * Toggle "ขึ้นจอทีวี" / "ขึ้นจอมือถือ" (multi-select allowed)
     - Video: play/pause writes videoState
+    - text_slideshow: autoplays while the page is current; host prev/next
+      buttons reset it to item 1 on arrival (a host reload mid-presentation
+      does NOT reset it — only explicit navigation does); host preview +
+      play/pause (freezes/resumes at current item, mirrors video control)
     - Live participant count
     - End session
   Links to /host/history
@@ -258,6 +279,9 @@ Firestore indexes automatically; no composite index required.
     separate lines
   - video -> fullscreen <video> synced via videoState.playing + startedAt seek
   - message -> fullscreen text
+  - text_slideshow -> items flow one after another with chosen CSS animation
+    (transform + opacity only) at durationSec per item; loops by default;
+    honors prefers-reduced-motion (falls back to a plain fade)
 
 7.3 Join /join
   - Name form 1–40 chars
@@ -273,6 +297,8 @@ Firestore indexes automatically; no composite index required.
   - split_question: two labeled textareas (promptA/promptB, 1–280 each),
     submitted together as one answer; see floating + showOnMobile
   - video/message: status text only (no local video playback required)
+  - text_slideshow: lightweight copy of the same slideshow (mobile-friendly,
+    smaller type) plus a "ดูที่จอทีวี" hint, no answer input
 
 7.5 History /host/history
   - List sessions by date
@@ -352,13 +378,19 @@ src/
   pages/Join/JoinPage.jsx
   pages/Participant/ParticipantPage.jsx
   components/FloatingAnswers/
+  components/SlideTransition/  (crossfade wrapper for TV/participant page changes)
+  components/TextSlideshow/    (TextSlideshow — shared TV/participant/host
+                          renderer for text_slideshow pages; variant prop
+                          controls type scale)
   components/PageEditor/  (PageEditor, PageForm, VideoUploader — shared by
                           sessions and decks via ownerId+scope props)
   hooks/                  useCurrentSession, usePages(ownerId,scope), useDecks,
                           useAnswers, useParticipants, useSessions,
-                          useFloatingQueue, useHasAnswered
+                          useFloatingQueue, useHasAnswered, useSlideshowIndex
   services/               session/page/deck/answer/participant/history/videoUpload
-  lib/                    auth.js, localStorage.js, csv.js
+  lib/                    auth.js, localStorage.js, csv.js, slideshow.js
+                          (getSlideshowSnapshot — derives current item from
+                          content + slideshowState, shared by useSlideshowIndex)
 server/
   index.js                media API
   package.json
